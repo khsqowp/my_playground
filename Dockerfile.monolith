@@ -1,0 +1,50 @@
+FROM node:18-bullseye-slim
+
+# Install PostgreSQL
+# Using bullseye-slim, postgresql version might vary, usually 13 on bullseye
+RUN apt-get update && apt-get install -y \
+    postgresql \
+    postgresql-contrib \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# App Setup
+WORKDIR /app
+COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
+COPY prisma ./prisma/
+
+RUN \
+    if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
+    elif [ -f package-lock.json ]; then npm ci; \
+    elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm i --frozen-lockfile; \
+    else echo "Lockfile not found." && exit 1; \
+    fi
+
+COPY . .
+
+# Generate Prisma Client
+RUN npx prisma generate
+
+# Build Next.js
+RUN npm run build
+
+# Copy startup script
+COPY scripts/start-monolith.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/start-monolith.sh
+
+# Environment (can be overridden at runtime)
+# Using '127.0.0.1' because it runs in the same container
+ENV DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/88motorcycle"
+ENV NEXTAUTH_URL="http://localhost:3000"
+# Set a default secret for build/test, should be overridden in production
+ENV NEXTAUTH_SECRET="default_secret_for_monolith_build" 
+ENV PORT 3000
+ENV HOSTNAME "0.0.0.0"
+
+# Expose ports
+EXPOSE 3000
+EXPOSE 5432
+
+# Set entrypoint
+ENTRYPOINT ["start-monolith.sh"]
+CMD ["npm", "start"]

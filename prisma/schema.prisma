@@ -1,0 +1,384 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==================== 인증 ====================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String
+  role          Role      @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  posts         Post[]
+  notes         Note[]
+  memos         Memo[]
+  quizSets      QuizSet[]
+  links         ExternalLink[]
+  activityLogs  ActivityLog[]
+  webhookConfigs WebhookConfig[]
+  incomingWebhooks IncomingWebhook[]
+  aiConfigs     AiConfig[]
+  aiPrompts     AiPrompt[]
+  shareLinks    ShareLink[]
+  portfolios    Portfolio[]
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  USER
+  GUEST
+}
+
+// ==================== 블로그 ====================
+
+model Post {
+  id          String      @id @default(cuid())
+  title       String
+  slug        String      @unique
+  content     String      @db.Text
+  excerpt     String?     @db.Text
+  coverImage  String?
+  published   Boolean     @default(false)
+  visibility  Visibility  @default(PRIVATE)
+
+  categoryId  String?
+  category    Category?   @relation(fields: [categoryId], references: [id])
+  tags        TagOnPost[]
+  seriesId    String?
+  series      Series?     @relation(fields: [seriesId], references: [id])
+  seriesOrder Int?
+
+  authorId    String
+  author      User        @relation(fields: [authorId], references: [id])
+
+  viewCount   Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([slug])
+  @@index([visibility, published])
+  @@index([categoryId])
+}
+
+model Category {
+  id    String  @id @default(cuid())
+  name  String  @unique
+  slug  String  @unique
+  color String?
+
+  posts Post[]
+  notes Note[]
+}
+
+model Tag {
+  id    String      @id @default(cuid())
+  name  String      @unique
+  posts TagOnPost[]
+  notes TagOnNote[]
+}
+
+model TagOnPost {
+  postId String
+  tagId  String
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+}
+
+model Series {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?  @db.Text
+  posts       Post[]
+  createdAt   DateTime @default(now())
+}
+
+enum Visibility {
+  PUBLIC
+  PRIVATE
+  SHARED
+}
+
+// ==================== 학습 아카이브 ====================
+
+model Note {
+  id          String     @id @default(cuid())
+  title       String
+  content     String     @db.Text
+  visibility  Visibility @default(PRIVATE)
+
+  categoryId  String?
+  category    Category?  @relation(fields: [categoryId], references: [id])
+  tags        TagOnNote[]
+
+  authorId    String
+  author      User       @relation(fields: [authorId], references: [id])
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model TagOnNote {
+  noteId String
+  tagId  String
+  note   Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, tagId])
+}
+
+model QuizSet {
+  id          String     @id @default(cuid())
+  title       String
+  description String?    @db.Text
+  visibility  Visibility @default(PRIVATE)
+
+  questions   QuizQuestion[]
+
+  authorId    String
+  author      User       @relation(fields: [authorId], references: [id])
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model QuizQuestion {
+  id          String   @id @default(cuid())
+  question    String   @db.Text
+  answer      String   @db.Text
+  hint        String?  @db.Text
+  order       Int
+
+  quizSetId   String
+  quizSet     QuizSet  @relation(fields: [quizSetId], references: [id], onDelete: Cascade)
+}
+
+// ==================== 데이터 관리 ====================
+
+model Memo {
+  id          String   @id @default(cuid())
+  content     String   @db.Text
+  categoryTag String?
+  pinned      Boolean  @default(false)
+
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([authorId, createdAt])
+}
+
+model DataCollection {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?  @db.Text
+  schema      Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  records     DataRecord[]
+}
+
+model DataRecord {
+  id           String         @id @default(cuid())
+  data         Json
+  collectionId String
+  collection   DataCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([collectionId])
+}
+
+// ==================== 자동화 ====================
+
+model WebhookConfig {
+  id        String          @id @default(cuid())
+  name      String
+  platform  WebhookPlatform
+  url       String
+  secret    String?
+  enabled   Boolean         @default(true)
+
+  userId    String
+  user      User            @relation(fields: [userId], references: [id])
+
+  logs      WebhookLog[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+enum WebhookPlatform {
+  DISCORD
+  SLACK
+  CUSTOM
+}
+
+model WebhookLog {
+  id          String   @id @default(cuid())
+  direction   String
+  payload     Json
+  status      String
+  response    String?  @db.Text
+
+  webhookId   String?
+  webhook     WebhookConfig? @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  incomingWebhookId String?
+  incomingWebhook   IncomingWebhook? @relation(fields: [incomingWebhookId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+  
+  @@index([webhookId])
+  @@index([incomingWebhookId])
+}
+
+model AiConfig {
+  id        String   @id @default(cuid())
+  provider  String
+  apiKey    String
+  model     String
+  isDefault Boolean  @default(false)
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model IncomingWebhook {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  enabled   Boolean  @default(true)
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  logs      WebhookLog[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model AiPrompt {
+  id        String   @id @default(cuid())
+  title     String
+  content   String   @db.Text
+  tags      String?
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ==================== 외부 링크 ====================
+
+model ExternalLink {
+  id          String   @id @default(cuid())
+  title       String
+  url         String
+  icon        String?
+  order       Int      @default(0)
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+
+  createdAt   DateTime @default(now())
+}
+
+// ==================== 공유 링크 ====================
+
+model ShareLink {
+  id          String    @id @default(cuid())
+  token       String    @unique @default(cuid())
+
+  targetType  String
+  targetId    String
+
+  expiresAt   DateTime?
+  maxAccess   Int?
+  accessCount Int       @default(0)
+  password    String?
+  active      Boolean   @default(true)
+
+  createdBy   String
+  creator     User      @relation(fields: [createdBy], references: [id])
+
+  createdAt   DateTime  @default(now())
+
+  @@index([token])
+  @@index([targetType, targetId])
+}
+
+// ==================== 활동 로그 ====================
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  action    String
+  target    String
+  targetId  String?
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// ==================== 시스템 설정 ====================
+
+model SystemSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String @db.Text
+}
+
+// ==================== 포트폴리오 ====================
+
+model Portfolio {
+  id          String      @id @default(cuid())
+  title       String
+  slug        String      @unique
+  description String?     @db.Text
+  content     String?     @db.Text
+  coverImage  String?
+  images      Json?       // [{url: string, caption?: string}]
+  links       Json?       // [{title: string, url: string, icon?: string}]
+  techStack   String?     // comma-separated
+  published   Boolean     @default(false)
+  visibility  Visibility  @default(PRIVATE)
+  sortOrder   Int         @default(0)
+
+  authorId    String
+  author      User        @relation(fields: [authorId], references: [id])
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([slug])
+  @@index([visibility, published])
+}
