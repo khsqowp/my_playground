@@ -42,14 +42,15 @@ jobs:
           Write-Host "Waiting for database to be ready..."
           Start-Sleep -Seconds 15
           
-          # 2) 임시 컨테이너를 띄워 DB 스키마 동기화 및 시드 실행 (가장 확실한 방법)
-          Write-Host "Syncing database schema & Seeding admin account..."
-          # npx prisma@6를 사용하여 버전 충돌 방지
-          docker-compose run --rm app npx prisma@6 db push --accept-data-loss
-          docker-compose run --rm app npm run db:seed
-          
           # 3) 나머지 전체 서비스 기동
           docker-compose up -d
+          Write-Host "Waiting for services to start (15s)..."
+          Start-Sleep -Seconds 15
+          
+          Write-Host "4. Forced Database Sync & Seeding..."
+          # 실행 중인 컨테이너에 직접 비밀번호를 주입하여 시드를 실행합니다.
+          docker exec -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" 88motorcycle-web npx prisma@6 db push --accept-data-loss
+          docker exec -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" 88motorcycle-web npx prisma@6 db seed
           
           Write-Host "Final Container Status:"
           docker ps -a
