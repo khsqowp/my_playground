@@ -15,8 +15,7 @@ jobs:
       - name: Build and Run Docker Containers
         shell: powershell
         run: |
-          Write-Host "1. Generating .env file from GitHub Secrets..."
-          # GitHub Secrets로부터 변수를 가져와 리눅스 호환 .env 파일 생성
+          Write-Host "1. Preparing environment..."
           $envLines = @(
             "DATABASE_URL=postgresql://postgres:postgres@db:5432/88motorcycle",
             "NEXTAUTH_URL=http://localhost:3000",
@@ -30,27 +29,20 @@ jobs:
             "UPLOAD_MAX_SIZE_MB=100",
             "UPLOAD_DIR=./public/uploads"
           )
-          # UTF-8 (BOM 없음) 및 LF(리눅스 줄바꿈)으로 저장
-          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::WriteAllText("$pwd\.env", ($envLines -join "`n"), $utf8NoBom)
-          Write-Host "Successfully generated .env file."
+          [System.IO.File]::WriteAllText("$pwd\.env", ($envLines -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
 
-          Write-Host "2. Deploying with Docker Compose..."
+          Write-Host "2. Building and Starting DB..."
           docker-compose down
-          # 1) 컨테이너 빌드 및 DB 엔진 우선 기동
           docker-compose up -d --build db
-          Write-Host "Waiting for database to be ready..."
           Start-Sleep -Seconds 15
           
-          # 3) 나머지 전체 서비스 기동
+          Write-Host "3. Syncing Database & Seeding Admin (Forced Injection)..."
+          # Force npx to use prisma v6 to avoid v7 issues
+          docker-compose run --rm -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" app npx prisma@6 db push --accept-data-loss
+          docker-compose run --rm -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" app npx prisma@6 db seed
+          
+          Write-Host "4. Starting Main Services..."
           docker-compose up -d
-          Write-Host "Waiting for services to start (15s)..."
-          Start-Sleep -Seconds 15
-          
-          Write-Host "4. Forced Database Sync & Seeding..."
-          # 실행 중인 컨테이너에 직접 비밀번호를 주입하여 시드를 실행합니다.
-          docker exec -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" 88motorcycle-web npx prisma@6 db push --accept-data-loss
-          docker exec -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" 88motorcycle-web npx prisma@6 db seed
           
           Write-Host "Final Container Status:"
           docker ps -a
