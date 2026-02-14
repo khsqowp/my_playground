@@ -18,6 +18,9 @@ jobs:
           DOCKER_HOST: tcp://localhost:2375
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ADMIN_NAME: ${{ secrets.ADMIN_NAME }}
         run: |
           Write-Host "Deploying with secrets directly from GitHub..."
           

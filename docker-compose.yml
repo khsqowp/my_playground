@@ -15,6 +15,11 @@ services:
       - AUTH_TRUST_HOST=true
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - AUTH_SECRET=${NEXTAUTH_SECRET}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ADMIN_NAME=${ADMIN_NAME}
+      - UPLOAD_MAX_SIZE_MB=100
+      - UPLOAD_DIR=./public/uploads
     depends_on:
       - db
     networks:
