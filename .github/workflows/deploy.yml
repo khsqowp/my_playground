@@ -14,6 +14,10 @@ jobs:
 
       - name: Build and Run Docker Containers
         shell: powershell
+        env:
+          DOCKER_HOST: npipe:////./pipe/docker_engine
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           docker-compose down
           docker-compose up -d --build
