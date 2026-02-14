@@ -15,7 +15,8 @@ jobs:
       - name: Build and Run Docker Containers
         shell: powershell
         run: |
-          Write-Host "1. Preparing environment..."
+          Write-Host "1. Building and Starting Services..."
+          # .env 파일을 최소한으로 생성 (컨테이너 내부 참조용)
           $envLines = @(
             "DATABASE_URL=postgresql://postgres:postgres@db:5432/88motorcycle",
             "NEXTAUTH_URL=http://localhost:3000",
@@ -25,27 +26,27 @@ jobs:
             "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}",
             "ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}",
             "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}",
-            "ADMIN_NAME=${{ secrets.ADMIN_NAME }}",
-            "UPLOAD_MAX_SIZE_MB=100",
-            "UPLOAD_DIR=./public/uploads"
+            "ADMIN_NAME=${{ secrets.ADMIN_NAME }}"
           )
           [System.IO.File]::WriteAllText("$pwd\.env", ($envLines -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
 
-          Write-Host "2. Building and Starting DB..."
           docker-compose down
-          docker-compose up -d --build db
-          Start-Sleep -Seconds 15
+          docker-compose up -d --build
           
-          Write-Host "3. Syncing Database & Seeding Admin (Direct Execution)..."
-          # Prisma 엔진 로드 에러 수정을 위해 generate 먼저 실행
-          docker-compose run --rm -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" app npx prisma generate
-          # 테이블 구조 동기화
-          docker-compose run --rm -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" app npx prisma db push --accept-data-loss
-          # 시드 스크립트 직접 실행 (Prisma 설정 우회)
-          docker-compose run --rm -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" app npx tsx prisma/seed.ts
+          Write-Host "Waiting for database to be ready (20s)..."
+          Start-Sleep -Seconds 20
           
-          Write-Host "4. Starting Main Services..."
-          docker-compose up -d
+          Write-Host "2. Syncing Database Schema (Using Official Prisma Image)..."
+          # 프로젝트의 prisma/schema.prisma 파일을 공식 prisma 이미지에 마운트하여 실행 (버전/엔진 문제 완전 해결)
+          docker run --rm --network my_playground_app-network `
+            -v ${pwd}\prisma:/prisma `
+            -e DATABASE_URL="postgresql://postgres:postgres@88motorcycle-db:5432/88motorcycle" `
+            prisma/prisma:6.2.0 prisma db push --accept-data-loss --schema=/prisma/schema.prisma
+
+          Write-Host "3. Seeding Admin Account (Direct Node Execution)..."
+          # 이미 구동된 앱 컨테이너에서 node로 직접 시드 스크립트 실행
+          docker exec -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" `
+            88motorcycle-web node prisma/seed-simple.js
           
-          Write-Host "Final Container Status:"
+          Write-Host "Final Status:"
           docker ps -a
