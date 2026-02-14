@@ -36,10 +36,13 @@ jobs:
           docker-compose up -d --build db
           Start-Sleep -Seconds 15
           
-          Write-Host "3. Syncing Database & Seeding Admin (Forced Injection)..."
-          # Force npx to use prisma v6 to avoid v7 issues
-          docker-compose run --rm -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" app npx prisma@6 db push --accept-data-loss
-          docker-compose run --rm -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" app npx prisma@6 db seed
+          Write-Host "3. Syncing Database & Seeding Admin (Direct Execution)..."
+          # Prisma 엔진 로드 에러 수정을 위해 generate 먼저 실행
+          docker-compose run --rm -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" app npx prisma generate
+          # 테이블 구조 동기화
+          docker-compose run --rm -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" app npx prisma db push --accept-data-loss
+          # 시드 스크립트 직접 실행 (Prisma 설정 우회)
+          docker-compose run --rm -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" app npx tsx prisma/seed.ts
           
           Write-Host "4. Starting Main Services..."
           docker-compose up -d

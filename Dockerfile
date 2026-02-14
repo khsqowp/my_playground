@@ -40,6 +40,7 @@ FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV production
+ENV PRISMA_SKIP_POSTINSTALL_GENERATE=true
 # Uncomment the following line in case you want to disable telemetry during runtime.
 # ENV NEXT_TELEMETRY_DISABLED 1
 
