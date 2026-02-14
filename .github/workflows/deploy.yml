@@ -15,7 +15,7 @@ jobs:
       - name: Build and Run Docker Containers
         shell: powershell
         env:
-          DOCKER_HOST: npipe:////./pipe/docker_engine
+          DOCKER_HOST: tcp://localhost:2375
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
