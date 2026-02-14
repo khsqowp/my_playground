@@ -17,10 +17,26 @@ jobs:
         env:
           DOCKER_HOST: tcp://localhost:2375
         run: |
+          Write-Host "Checking current directory..."
+          ls
+          
+          Write-Host "Stopping existing containers..."
           docker-compose down
+          
+          Write-Host "Starting containers..."
           if (Test-Path .env) {
+            Write-Host "Using .env file found in directory."
             docker-compose --env-file .env up -d --build
           } else {
+            Write-Host "No .env file found. Starting without it."
             docker-compose up -d --build
           }
+          
+          Write-Host "Waiting for containers to settle..."
+          Start-Sleep -Seconds 5
+          
+          Write-Host "Current Container Status:"
+          docker ps -a
+          
+          Write-Host "Cleaning up unused images..."
           docker image prune -f
