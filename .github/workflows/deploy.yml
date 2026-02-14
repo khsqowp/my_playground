@@ -17,28 +17,27 @@ jobs:
         env:
           DOCKER_HOST: tcp://localhost:2375
         run: |
-          Write-Host "Fixing file names (removing @ prefix from dotfiles)..."
-          Get-ChildItem -Path . -Filter "@.*" | ForEach-Object {
-            $newName = $_.Name.Substring(1)
-            if (-not (Test-Path $newName)) {
-              Rename-Item $_.FullName $newName
-              Write-Host "Renamed: $($_.Name) -> $newName"
-            }
-          }
+          Write-Host "Cleaning up and preparing environment..."
+          # 기존 .env 파일 제거
+          if (Test-Path .env) { Remove-Item .env -Force }
 
-          Write-Host "Checking for persistent .env file..."
+          # C:\actions-runner\.env를 읽어서 UTF-8로 다시 저장 (인코딩 문제 해결)
           if (Test-Path "C:\actions-runner\.env") {
-            Copy-Item "C:\actions-runner\.env" .env -Force
-            Write-Host "Successfully copied .env from C:\actions-runner\.env"
+            $content = Get-Content "C:\actions-runner\.env" -Raw
+            # UTF-8 (BOM 없음)으로 저장
+            [System.IO.File]::WriteAllText("$pwd\.env", $content, (New-Object System.Text.UTF8Encoding($false)))
+            Write-Host "Successfully recreated .env in UTF-8 encoding."
+          } else {
+            Write-Host "ERROR: C:\actions-runner\.env not found!"
+            exit 1
           }
 
-          if (Test-Path .env) {
-            Write-Host "Ensuring AUTH_SECRET is set in .env..."
-            $envContent = Get-Content .env
-            if ($envContent -match "NEXTAUTH_SECRET=" -and $envContent -notmatch "AUTH_SECRET=") {
-              $secret = ($envContent -match "NEXTAUTH_SECRET=(.*)" | Out-String).Split('=')[1].Trim()
-              Add-Content .env "`nAUTH_SECRET=$secret"
-              Write-Host "Synced AUTH_SECRET from NEXTAUTH_SECRET"
+          # 파일 이름 앞에 @가 붙은 파일들 정리
+          Get-ChildItem -Path . -Filter "@.*" | ForEach-Object {
+            $newName = $_.Name.Replace("@", "")
+            if (-not (Test-Path $newName)) {
+              Move-Item $_.FullName $newName -Force
+              Write-Host "Renamed: $($_.Name) -> $newName"
             }
           }
 
@@ -46,11 +45,8 @@ jobs:
           docker-compose down
           
           Write-Host "Starting containers..."
-          # --env-file 플래그를 명시적으로 사용하여 실행
+          # --env-file을 명시하여 모든 변수 주입
           docker-compose --env-file .env up -d --build
-          
-          Write-Host "Waiting for containers to settle..."
-          Start-Sleep -Seconds 5
           
           Write-Host "Current Container Status:"
           docker ps -a
