@@ -17,45 +17,26 @@ jobs:
         env:
           DOCKER_HOST: tcp://localhost:2375
         run: |
-          Write-Host "1. Fixing file names (removing @ prefix)..."
-          Get-ChildItem -Path . -Filter "@.*" -Recurse | ForEach-Object {
-            $newName = $_.Name.Replace("@", "")
-            $targetPath = Join-Path $_.DirectoryName $newName
-            if (-not (Test-Path $targetPath)) {
-              Move-Item $_.FullName $targetPath -Force
-              Write-Host "Fixed: $($_.Name) -> $newName"
-            }
-          }
-
-          Write-Host "2. Preparing .env file (Encoding & Line endings)..."
+          Write-Host "1. Preparing environment variables..."
           $masterEnv = "C:\actions-runner\.env"
-          $targetEnv = Join-Path (Get-Location) ".env"
-
           if (Test-Path $masterEnv) {
-            # 파일을 raw하게 읽어서 줄바꿈 문자를 \n으로 통일 (Linux 방식)
-            $content = [System.IO.File]::ReadAllText($masterEnv)
-            $content = $content -replace "\r\n", "`n" -replace "\r", "`n"
-            
-            # UTF-8 (BOM 없음)으로 저장
-            $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-            [System.IO.File]::WriteAllText($targetEnv, $content, $utf8NoBom)
-            Write-Host "Successfully converted $masterEnv to UTF-8 LF at $targetEnv"
-
-            # AUTH_SECRET 동기화 (Auth.js v5 대응)
-            if ($content -match "NEXTAUTH_SECRET=" -and $content -notmatch "AUTH_SECRET=") {
-              $secretLine = $content -split "`n" | Select-String "NEXTAUTH_SECRET="
-              $val = ($secretLine -split "=")[1].Trim()
-              Add-Content .env "`nAUTH_SECRET=$val"
-              Write-Host "Synced AUTH_SECRET from NEXTAUTH_SECRET"
+            # .env 파일을 읽어서 현재 세션의 환경 변수로 등록
+            Get-Content $masterEnv | ForEach-Object {
+              if ($_ -match '^(?<name>[^#\s][^=]*)=(?<value>.*)$') {
+                $name = $Matches['name'].Trim()
+                $value = $Matches['value'].Trim().Trim('"').Trim("'")
+                [System.Environment]::SetEnvironmentVariable($name, $value)
+                Write-Host "Exported: $name"
+              }
             }
-          } else {
-            Write-Host "ERROR: Master .env not found at $masterEnv"
-            exit 1
+            # .env 파일 자체도 생성 (이미지 빌드 시 필요할 수 있음)
+            Copy-Item $masterEnv .env -Force
           }
 
-          Write-Host "3. Deploying with Docker Compose..."
+          Write-Host "2. Deploying with Docker Compose..."
           docker-compose down
-          docker-compose --env-file .env up -d --build
+          # 환경 변수가 주입된 상태에서 실행
+          docker-compose up -d --build
           
           Write-Host "Current Container Status:"
           docker ps -a
