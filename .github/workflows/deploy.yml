@@ -22,18 +22,24 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           ADMIN_NAME: ${{ secrets.ADMIN_NAME }}
         run: |
-          Write-Host "Deploying with secrets directly from GitHub..."
+          Write-Host "Deploying with GitHub Secrets..."
           
-          # -v 옵션을 추가하여 기존 데이터(잘못된 관리자 계정 등)를 한 번 삭제합니다.
-          docker-compose down -v
+          # 1. 기존 컨테이너 중지 (데이터 볼륨은 유지)
+          docker-compose down
+          
+          # 2. 컨테이너 시작
           docker-compose up -d --build
           
-          Write-Host "Waiting for database to be ready..."
-          Start-Sleep -Seconds 10
+          Write-Host "Waiting for services to be ready (20s)..."
+          Start-Sleep -Seconds 20
           
-          Write-Host "Syncing database schema and admin account..."
+          # 3. 데이터베이스 테이블 생성 및 시드 실행
+          Write-Host "Syncing database schema..."
           docker exec 88motorcycle-web npx prisma db push --accept-data-loss
+          
+          Write-Host "Seeding admin account and initial data..."
           docker exec 88motorcycle-web npx prisma db seed
           
-          Write-Host "Current Container Status:"
+          Write-Host "Final Container Status:"
+          docker ps -a
           docker ps -a
