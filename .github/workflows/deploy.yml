@@ -17,34 +17,37 @@ jobs:
         env:
           DOCKER_HOST: tcp://localhost:2375
         run: |
+          Write-Host "Fixing file names (removing @ prefix from dotfiles)..."
+          Get-ChildItem -Path . -Filter "@.*" | ForEach-Object {
+            $newName = $_.Name.Substring(1)
+            if (-not (Test-Path $newName)) {
+              Rename-Item $_.FullName $newName
+              Write-Host "Renamed: $($_.Name) -> $newName"
+            }
+          }
+
           Write-Host "Checking for persistent .env file..."
           if (Test-Path "C:\actions-runner\.env") {
-            Copy-Item "C:\actions-runner\.env" .env
+            Copy-Item "C:\actions-runner\.env" .env -Force
             Write-Host "Successfully copied .env from C:\actions-runner\.env"
-          } elseif (Test-Path "../../.env") {
-            Copy-Item "../../.env" .env
-            Write-Host "Successfully copied .env from parent directory"
           }
 
           if (Test-Path .env) {
-            Write-Host "Loading environment variables from .env..."
-            Get-Content .env | Foreach-Object {
-              if ($_ -match '^(?<name>[^#\s][^=]*)=(?<value>.*)$') {
-                $name = $Matches['name'].Trim()
-                $value = $Matches['value'].Trim()
-                [System.Environment]::SetEnvironmentVariable($name, $value)
-                Write-Host "Loaded: $name"
-              }
+            Write-Host "Ensuring AUTH_SECRET is set in .env..."
+            $envContent = Get-Content .env
+            if ($envContent -match "NEXTAUTH_SECRET=" -and $envContent -notmatch "AUTH_SECRET=") {
+              $secret = ($envContent -match "NEXTAUTH_SECRET=(.*)" | Out-String).Split('=')[1].Trim()
+              Add-Content .env "`nAUTH_SECRET=$secret"
+              Write-Host "Synced AUTH_SECRET from NEXTAUTH_SECRET"
             }
-          } else {
-            Write-Host "WARNING: No .env file found to load variables."
           }
 
           Write-Host "Stopping existing containers..."
           docker-compose down
           
           Write-Host "Starting containers..."
-          docker-compose up -d --build
+          # --env-file 플래그를 명시적으로 사용하여 실행
+          docker-compose --env-file .env up -d --build
           
           Write-Host "Waiting for containers to settle..."
           Start-Sleep -Seconds 5
