@@ -44,12 +44,12 @@ jobs:
           
           # 2) 임시 컨테이너를 띄워 DB 스키마 동기화 및 시드 실행 (가장 확실한 방법)
           Write-Host "Syncing database schema & Seeding admin account..."
-          docker-compose run --rm app npx prisma db push --accept-data-loss
-          docker-compose run --rm app npx prisma db seed
+          # npx prisma@6를 사용하여 버전 충돌 방지
+          docker-compose run --rm app npx prisma@6 db push --accept-data-loss
+          docker-compose run --rm app npm run db:seed
           
           # 3) 나머지 전체 서비스 기동
           docker-compose up -d
           
           Write-Host "Final Container Status:"
-          docker ps -a
           docker ps -a
