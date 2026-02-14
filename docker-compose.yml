@@ -60,10 +60,9 @@ services:
       context: ./agent
       dockerfile: Dockerfile
     restart: always
-    env_file:
-      - .env
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/88motorcycle
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     depends_on:
       - db
     volumes:
