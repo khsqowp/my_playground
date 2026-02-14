@@ -15,35 +15,31 @@ jobs:
       - name: Build and Run Docker Containers
         shell: powershell
         run: |
-          Write-Host "1. Building Services..."
-          # .env 파일을 아주 원시적인 방식으로 생성 (인코딩/파일명 에러 방지)
-          $envContent = "DATABASE_URL=postgresql://postgres:postgres@db:5432/88motorcycle`n" +
-                        "NEXTAUTH_URL=http://localhost:3000`n" +
-                        "AUTH_TRUST_HOST=true`n" +
-                        "NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}`n" +
-                        "AUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}`n" +
-                        "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}`n" +
-                        "ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}`n" +
-                        "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}`n" +
-                        "ADMIN_NAME=${{ secrets.ADMIN_NAME }}`n" +
-                        "UPLOAD_MAX_SIZE_MB=100`n" +
-                        "UPLOAD_DIR=./public/uploads"
-          
-          Set-Content -Path ".env" -Value $envContent -Encoding UTF8
-          Write-Host "Successfully generated .env file."
+          Write-Host "1. Building and Starting Services..."
+          # 환경 변수들을 .env 파일에 안전하게 담기
+          $envLines = @(
+            "DATABASE_URL=postgresql://postgres:postgres@db:5432/88motorcycle",
+            "NEXTAUTH_URL=http://localhost:3000",
+            "AUTH_TRUST_HOST=true",
+            "NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}",
+            "AUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}",
+            "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}",
+            "ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}",
+            "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}",
+            "ADMIN_NAME=${{ secrets.ADMIN_NAME }}",
+            "UPLOAD_MAX_SIZE_MB=100",
+            "UPLOAD_DIR=./public/uploads"
+          )
+          [System.IO.File]::WriteAllText("$pwd\.env", ($envLines -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
 
+          # 재빌드 및 재시작
           docker-compose down
           docker-compose up -d --build
           
-          Write-Host "2. Waiting for database (30s)..."
-          Start-Sleep -Seconds 30
-          
-          Write-Host "3. Syncing Database & Seeding Admin..."
-          # Prisma 6 버전을 강제하여 v7과의 충돌을 원천 차단
-          docker exec 88motorcycle-web npx prisma@6 db push --accept-data-loss
-          
-          # seed-simple.js를 사용하여 의존성 문제 해결 (node로 직접 실행)
+          Write-Host "2. Finalizing Database (Sync & Seed)..."
+          # 이미지 안에 엔진이 포함되어 있으므로 이제 에러가 나지 않습니다.
+          docker exec 88motorcycle-web npx prisma db push --accept-data-loss
           docker exec -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" 88motorcycle-web node prisma/seed-simple.js
           
-          Write-Host "Final Status:"
+          Write-Host "Deployment Complete."
           docker ps -a
