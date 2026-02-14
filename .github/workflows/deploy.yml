@@ -16,9 +16,11 @@ jobs:
         shell: powershell
         env:
           DOCKER_HOST: tcp://localhost:2375
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           docker-compose down
-          docker-compose up -d --build
+          if (Test-Path .env) {
+            docker-compose --env-file .env up -d --build
+          } else {
+            docker-compose up -d --build
+          }
           docker image prune -f
