@@ -28,5 +28,12 @@ jobs:
           docker-compose down -v
           docker-compose up -d --build
           
+          Write-Host "Waiting for database to be ready..."
+          Start-Sleep -Seconds 10
+          
+          Write-Host "Syncing database schema and admin account..."
+          docker exec 88motorcycle-web npx prisma db push --accept-data-loss
+          docker exec 88motorcycle-web npx prisma db seed
+          
           Write-Host "Current Container Status:"
           docker ps -a
