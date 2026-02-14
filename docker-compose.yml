@@ -15,7 +15,6 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/88motorcycle
       - NEXTAUTH_URL=http://localhost:3000
       - AUTH_TRUST_HOST=true
-      - AUTH_SECRET=${NEXTAUTH_SECRET}
     depends_on:
       - db
     networks:
