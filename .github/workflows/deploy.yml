@@ -16,50 +16,14 @@ jobs:
         shell: powershell
         env:
           DOCKER_HOST: tcp://localhost:2375
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          Write-Host "1. Fixing broken filenames (removing @ prefix)..."
-          Get-ChildItem -Path . -Filter "@*" -Recurse | ForEach-Object {
-            $newName = $_.Name.Replace("@", ".")
-            $targetPath = Join-Path $_.DirectoryName $newName
-            if (-not (Test-Path $targetPath)) {
-              Move-Item $_.FullName $targetPath -Force
-              Write-Host "Fixed: $($_.Name) -> $newName"
-            }
-          }
-
-          Write-Host "2. Loading and cleaning secrets from C:\actions-runner\.env..."
-          $masterEnv = "C:\actions-runner\.env"
-          $localEnv = ".env"
+          Write-Host "Deploying with secrets directly from GitHub..."
           
-          if (Test-Path $masterEnv) {
-            $content = Get-Content $masterEnv
-            $cleanedContent = @()
-            
-            foreach ($line in $content) {
-              if ($line -match '^([^#\s][^=]*)=(.*)$') {
-                $key = $Matches[1].Trim()
-                # 따옴표 제거 및 값 정제
-                $val = $Matches[2].Trim().Trim('"').Trim("'")
-                
-                # 시스템 환경 변수로 등록 (가장 확실한 방법)
-                [System.Environment]::SetEnvironmentVariable($key, $val, "Process")
-                $cleanedContent += "$key=$val"
-                Write-Host "Loaded secret: $key"
-              } else {
-                $cleanedContent += $line
-              }
-            }
-            # 정제된 내용으로 로컬 .env 파일 생성
-            $cleanedContent | Out-File -FilePath $localEnv -Encoding UTF8
-          } else {
-            Write-Host "ERROR: Master .env not found at $masterEnv"
-            exit 1
-          }
-
-          Write-Host "3. Deploying with Docker Compose..."
           docker-compose down
-          # 환경 변수가 쉘과 파일 양쪽에 모두 준비된 상태에서 실행
-          docker-compose --env-file .env up -d --build
+          # GitHub Secrets로부터 환경 변수가 직접 주입됩니다.
+          docker-compose up -d --build
           
           Write-Host "Current Container Status:"
           docker ps -a
