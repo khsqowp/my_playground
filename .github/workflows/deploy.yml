@@ -17,24 +17,49 @@ jobs:
         env:
           DOCKER_HOST: tcp://localhost:2375
         run: |
-          Write-Host "1. Preparing .env file..."
+          Write-Host "1. Fixing broken filenames (removing @ prefix)..."
+          Get-ChildItem -Path . -Filter "@*" -Recurse | ForEach-Object {
+            $newName = $_.Name.Replace("@", ".")
+            $targetPath = Join-Path $_.DirectoryName $newName
+            if (-not (Test-Path $targetPath)) {
+              Move-Item $_.FullName $targetPath -Force
+              Write-Host "Fixed: $($_.Name) -> $newName"
+            }
+          }
+
+          Write-Host "2. Loading and cleaning secrets from C:\actions-runner\.env..."
           $masterEnv = "C:\actions-runner\.env"
           $localEnv = ".env"
           
           if (Test-Path $masterEnv) {
-            # 윈도우 인코딩 문제를 피하기 위해 원본을 그대로 복사 (UTF-8 가정)
-            Copy-Item $masterEnv $localEnv -Force
-            Write-Host "Successfully copied .env from $masterEnv"
+            $content = Get-Content $masterEnv
+            $cleanedContent = @()
+            
+            foreach ($line in $content) {
+              if ($line -match '^([^#\s][^=]*)=(.*)$') {
+                $key = $Matches[1].Trim()
+                # 따옴표 제거 및 값 정제
+                $val = $Matches[2].Trim().Trim('"').Trim("'")
+                
+                # 시스템 환경 변수로 등록 (가장 확실한 방법)
+                [System.Environment]::SetEnvironmentVariable($key, $val, "Process")
+                $cleanedContent += "$key=$val"
+                Write-Host "Loaded secret: $key"
+              } else {
+                $cleanedContent += $line
+              }
+            }
+            # 정제된 내용으로 로컬 .env 파일 생성
+            $cleanedContent | Out-File -FilePath $localEnv -Encoding UTF8
           } else {
             Write-Host "ERROR: Master .env not found at $masterEnv"
             exit 1
           }
 
-          Write-Host "2. Deploying with Docker Compose..."
+          Write-Host "3. Deploying with Docker Compose..."
           docker-compose down
-          
-          # --env-file 플래그를 사용하여 파일의 값을 변수 보간(${VAR})에 강제 사용
-          docker-compose --env-file $localEnv up -d --build
+          # 환경 변수가 쉘과 파일 양쪽에 모두 준비된 상태에서 실행
+          docker-compose --env-file .env up -d --build
           
           Write-Host "Current Container Status:"
           docker ps -a
