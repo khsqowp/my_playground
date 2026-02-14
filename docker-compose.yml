@@ -7,6 +7,8 @@ services:
     restart: always
     ports:
       - "3000:3000"
+    volumes:
+      - uploads_data:/app/public/uploads
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/88motorcycle
       - NEXTAUTH_URL=http://localhost:3000
@@ -73,3 +75,4 @@ networks:
 
 volumes:
   postgres_data:
+  uploads_data:
