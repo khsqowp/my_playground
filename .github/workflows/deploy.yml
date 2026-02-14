@@ -24,8 +24,8 @@ jobs:
         run: |
           Write-Host "Deploying with secrets directly from GitHub..."
           
-          docker-compose down
-          # GitHub Secrets로부터 환경 변수가 직접 주입됩니다.
+          # -v 옵션을 추가하여 기존 데이터(잘못된 관리자 계정 등)를 한 번 삭제합니다.
+          docker-compose down -v
           docker-compose up -d --build
           
           Write-Host "Current Container Status:"
