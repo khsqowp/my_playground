@@ -37,9 +37,12 @@ jobs:
           docker-compose up -d --build
           
           Write-Host "2. Finalizing Database (Sync & Seed)..."
-          # 이미지 안에 엔진이 포함되어 있으므로 이제 에러가 나지 않습니다.
-          docker exec 88motorcycle-web npx prisma db push --accept-data-loss
-          docker exec -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" 88motorcycle-web node prisma/seed-simple.js
+          # Prisma 6 버전을 강제하여 v7과의 충돌을 완전히 차단
+          docker exec 88motorcycle-web npx prisma@6 db push --accept-data-loss
+          
+          # 이미 구동된 앱 컨테이너에서 비밀번호 업데이트 시도
+          docker exec -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" `
+            88motorcycle-web node prisma/seed-simple.js
           
           Write-Host "Deployment Complete."
           docker ps -a

@@ -46,6 +46,9 @@ ENV NODE_ENV production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
+# Force install maintenance tools in runner stage
+RUN npm install bcryptjs prisma@6.2.0
+
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 
