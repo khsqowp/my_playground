@@ -9,17 +9,12 @@ services:
       - "3000:3000"
     volumes:
       - uploads_data:/app/public/uploads
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/88motorcycle
       - NEXTAUTH_URL=http://localhost:3000
       - AUTH_TRUST_HOST=true
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
-      - AUTH_SECRET=${NEXTAUTH_SECRET}
-      - ADMIN_EMAIL=${ADMIN_EMAIL}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - ADMIN_NAME=${ADMIN_NAME}
-      - UPLOAD_MAX_SIZE_MB=100
-      - UPLOAD_DIR=./public/uploads
     depends_on:
       - db
     networks:
