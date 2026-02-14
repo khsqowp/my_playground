@@ -18,15 +18,26 @@ jobs:
           DOCKER_HOST: tcp://localhost:2375
         run: |
           Write-Host "Checking for persistent .env file..."
-          # C:\actions-runner\.env 파일을 현재 폴더로 복사
           if (Test-Path "C:\actions-runner\.env") {
             Copy-Item "C:\actions-runner\.env" .env
             Write-Host "Successfully copied .env from C:\actions-runner\.env"
           } elseif (Test-Path "../../.env") {
             Copy-Item "../../.env" .env
             Write-Host "Successfully copied .env from parent directory"
+          }
+
+          if (Test-Path .env) {
+            Write-Host "Loading environment variables from .env..."
+            Get-Content .env | Foreach-Object {
+              if ($_ -match '^(?<name>[^#\s][^=]*)=(?<value>.*)$') {
+                $name = $Matches['name'].Trim()
+                $value = $Matches['value'].Trim()
+                [System.Environment]::SetEnvironmentVariable($name, $value)
+                Write-Host "Loaded: $name"
+              }
+            }
           } else {
-            Write-Host "WARNING: No persistent .env file found at C:\actions-runner\.env"
+            Write-Host "WARNING: No .env file found to load variables."
           }
 
           Write-Host "Stopping existing containers..."

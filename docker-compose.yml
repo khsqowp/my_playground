@@ -9,11 +9,13 @@ services:
       - "3000:3000"
     volumes:
       - uploads_data:/app/public/uploads
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/88motorcycle
       - NEXTAUTH_URL=http://localhost:3000
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - AUTH_TRUST_HOST=true
+      - AUTH_SECRET=${NEXTAUTH_SECRET}
     depends_on:
       - db
     networks:
@@ -59,9 +61,10 @@ services:
       context: ./agent
       dockerfile: Dockerfile
     restart: always
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/88motorcycle
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
     depends_on:
       - db
     volumes:
