@@ -20,7 +20,7 @@ export function Header() {
   const { data: session } = useSession();
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b bg-background px-4">
       <div className="flex items-center gap-2">
         <MobileNav />
         <h2 className="text-lg font-semibold md:hidden">88Motorcycle</h2>

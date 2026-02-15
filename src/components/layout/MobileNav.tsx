@@ -21,9 +21,9 @@ import { Button } from "@/components/ui/button";
 
 const navItems = [
   { title: "대시보드", href: "/dashboard", icon: LayoutDashboard },
-  { title: "블로그", href: "/blog", icon: PenSquare },
+  { title: "블로그", href: "/manage/blog", icon: PenSquare },
+  { title: "포트폴리오", href: "/manage/portfolio", icon: BookOpen },
   { title: "아카이브", href: "/archive", icon: BookOpen },
-  { title: "데이터", href: "/data", icon: Database },
   { title: "자동화", href: "/automation", icon: Zap },
   { title: "도구", href: "/tools", icon: Wrench },
   { title: "링크", href: "/links", icon: Link2 },

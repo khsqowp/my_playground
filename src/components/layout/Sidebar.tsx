@@ -90,7 +90,7 @@ export function Sidebar({ className }: SidebarProps) {
     <TooltipProvider delayDuration={0}>
       <div
         className={cn(
-          "relative hidden border-r bg-sidebar md:flex md:flex-col transition-all duration-300",
+          "relative hidden border-r bg-background z-20 md:flex md:flex-col transition-all duration-300",
           collapsed ? "w-16" : "w-64",
           className
         )}

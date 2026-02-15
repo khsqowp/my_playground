@@ -15,11 +15,14 @@ jobs:
       - name: Build and Run Docker Containers
         shell: powershell
         run: |
-          Write-Host "1. Building and Starting Services..."
-          # 환경 변수들을 .env 파일에 안전하게 담기
+          # 한글 깨짐 방지를 위한 인코딩 설정
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          $OutputEncoding = [System.Text.Encoding]::UTF8
+
+          Write-Host "1. Preparing environment file..."
           $envLines = @(
             "DATABASE_URL=postgresql://postgres:postgres@db:5432/88motorcycle",
-            "NEXTAUTH_URL=http://localhost:3000",
+            "NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}",
             "AUTH_TRUST_HOST=true",
             "NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}",
             "AUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}",
@@ -36,7 +39,10 @@ jobs:
           docker-compose down
           docker-compose up -d --build
           
-          Write-Host "2. Finalizing Database (Sync & Seed)..."
+          Write-Host "2. Waiting for database (30s)..."
+          Start-Sleep -Seconds 30
+          
+          Write-Host "3. Finalizing Database (Sync & Seed)..."
           # Prisma 6 버전을 강제하여 v7과의 충돌을 완전히 차단
           docker exec 88motorcycle-web npx prisma@6 db push --accept-data-loss
           
