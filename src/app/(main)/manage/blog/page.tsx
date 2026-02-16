@@ -53,11 +53,11 @@ export default async function BlogPage({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Link href="/blog">
+        <Link href="/manage/blog">
           <Badge variant={!params.category ? "default" : "outline"}>전체</Badge>
         </Link>
         {categories.map((cat) => (
-          <Link key={cat.id} href={`/blog?category=${cat.slug}`}>
+          <Link key={cat.id} href={`/manage/blog?category=${cat.slug}`}>
             <Badge variant={params.category === cat.slug ? "default" : "outline"}>
               {cat.name} ({cat._count.posts})
             </Badge>
@@ -77,7 +77,7 @@ export default async function BlogPage({
       {totalPages > 1 && (
         <div className="flex justify-center gap-2">
           {Array.from({ length: totalPages }, (_, i) => (
-            <Link key={i} href={`/blog?page=${i + 1}${params.category ? `&category=${params.category}` : ""}`}>
+            <Link key={i} href={`/manage/blog?page=${i + 1}${params.category ? `&category=${params.category}` : ""}`}>
               <Button variant={page === i + 1 ? "default" : "outline"} size="sm">
                 {i + 1}
               </Button>
