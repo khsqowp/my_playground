@@ -64,7 +64,7 @@ export default function MembersManagementPage() {
 
       <Tabs defaultValue="pending" className="w-full">
         <div className="flex items-center justify-between mb-4">
-          <div className="flex gap-2">
+          <TabsList>
             <TabsTrigger value="pending" className="relative">
               가입 신청
               {pendingUsers.length > 0 && (
@@ -74,7 +74,7 @@ export default function MembersManagementPage() {
               )}
             </TabsTrigger>
             <TabsTrigger value="approved">활동 멤버</TabsTrigger>
-          </div>
+          </TabsList>
         </div>
 
         <TabsContent value="pending">
