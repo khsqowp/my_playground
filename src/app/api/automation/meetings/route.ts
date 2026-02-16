@@ -48,10 +48,16 @@ export async function POST(request: NextRequest) {
 
   if (type === "SETTINGS") {
     const { secrets } = data;
+    let webhookSlug = "";
     
     for (const secret of secrets) {
       if (!secret.name || !secret.value) continue;
       if (secret.value === "********") continue;
+
+      // 웹훅 슬러그 값 추출
+      if (secret.name.includes("GITHUB_WEBHOOK_SLUG")) {
+        webhookSlug = secret.value;
+      }
 
       await prisma.projectSetting.upsert({
         where: {
@@ -65,17 +71,18 @@ export async function POST(request: NextRequest) {
           projectId: project.id,
           key: secret.name,
           value: secret.value,
-          isSecret: true
+          isSecret: secret.name.includes("KEY") || secret.name.includes("URL")
         }
       });
     }
 
-    // [핵심 추가] 저장 시 웹훅 연결 확인 및 수정
-    // 슬러그가 zljno6...인 웹훅이 있다면 이 프로젝트에 강제 연결
-    await prisma.incomingWebhook.updateMany({
-      where: { slug: "zljno60o6phsajausdkbq" },
-      data: { projectId: project.id }
-    });
+    // 사용자가 입력한 슬러그가 있다면 해당 웹훅을 이 프로젝트에 연결
+    if (webhookSlug) {
+      await prisma.incomingWebhook.updateMany({
+        where: { slug: webhookSlug },
+        data: { projectId: project.id }
+      });
+    }
 
     return NextResponse.json({ success: true });
   }
