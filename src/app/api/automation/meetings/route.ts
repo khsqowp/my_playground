@@ -54,8 +54,8 @@ export async function POST(request: NextRequest) {
       if (!secret.name || !secret.value) continue;
       if (secret.value === "********") continue;
 
-      // 웹훅 슬러그 값 추출
-      if (secret.name.includes("GITHUB_WEBHOOK_SLUG")) {
+      // 웹훅 슬러그 값 추출 (범용 이름으로 변경)
+      if (secret.name.includes("PROJECT_WEBHOOK_SLUG")) {
         webhookSlug = secret.value;
       }
 

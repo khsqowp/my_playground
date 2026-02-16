@@ -69,10 +69,13 @@ export async function POST(
     // 5. 프로젝트 활동 로그 저장 (ProjectActivityLog)
     if (webhook.projectId) {
         let action = "WEBHOOK_EVENT";
-        let content = "외부 웹훅 이벤트 발생";
-        const platform = request.headers.get("x-github-event") ? "GITHUB" : "EXTERNAL";
+        let content = "외부 데이터 수신";
+        const userAgent = request.headers.get("user-agent") || "";
+        let platform = "EXTERNAL";
 
-        if (platform === "GITHUB") {
+        // 플랫폼 감지 로직 고도화
+        if (request.headers.get("x-github-event")) {
+            platform = "GITHUB";
             const event = request.headers.get("x-github-event");
             action = event?.toUpperCase() || "GITHUB_EVENT";
             
@@ -86,6 +89,12 @@ export async function POST(
             } else {
                 content = `GitHub 이벤트 발생: ${event}`;
             }
+        } else if (userAgent.includes("Slack")) {
+            platform = "SLACK";
+            content = payload.text || "Slack 메시지 수신";
+        } else if (userAgent.includes("Discord")) {
+            platform = "DISCORD";
+            content = payload.content || "Discord 메시지 수신";
         }
 
         await prisma.projectActivityLog.create({

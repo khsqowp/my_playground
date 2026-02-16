@@ -37,7 +37,7 @@ export default function ProjectMainPage({ params }: { params: Promise<{ projectN
     { name: `${projectName}_NOTION_API_KEY`, value: "" },
     { name: `${projectName}_NOTION_PAGE_ID`, value: "" },
     { name: `${projectName}_GITHUB_REPO`, value: "khsqowp/my_playground" },
-    { name: `${projectName}_GITHUB_WEBHOOK_SLUG`, value: "" },
+    { name: `${projectName}_PROJECT_WEBHOOK_SLUG`, value: "" },
     { name: `${projectName}_DISCORD_WEBHOOK_URL`, value: "" },
     { name: `${projectName}_MIDNIGHT_REPORT_TYPE`, value: "RAW" },
   ]);
