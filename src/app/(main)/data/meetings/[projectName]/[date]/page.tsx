@@ -11,7 +11,8 @@ import {
   FileText,
   Clock,
   Plus,
-  Download
+  Download,
+  ChevronDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +35,7 @@ export default function DailyLogPage({ params }: { params: Promise<{ projectName
 
   const [logs, setLogs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchLogs();
@@ -135,21 +137,43 @@ export default function DailyLogPage({ params }: { params: Promise<{ projectName
                     </TableRow>
                   ) : (
                     logs.map((log) => (
-                      <TableRow key={log.id}>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {format(new Date(log.eventTime), "HH:mm:ss")}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {log.platform === "GITHUB" ? <Github className="h-3.5 w-3.5" /> : <Database className="h-3.5 w-3.5" />}
-                            <span className="text-xs font-bold">{log.platform}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="text-[10px]">{log.action}</Badge>
-                        </TableCell>
-                        <TableCell className="text-sm">{log.content}</TableCell>
-                      </TableRow>
+                      <>
+                        <TableRow 
+                          key={log.id} 
+                          className="cursor-pointer hover:bg-muted/50 transition-colors"
+                          onClick={() => setExpandedId(expandedId === log.id ? null : log.id)}
+                        >
+                          <TableCell className="text-xs text-muted-foreground">
+                            {format(new Date(log.eventTime), "HH:mm:ss")}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {log.platform === "GITHUB" ? <Github className="h-3.5 w-3.5" /> : <Database className="h-3.5 w-3.5" />}
+                              <span className="text-xs font-bold">{log.platform}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="text-[10px]">{log.action}</Badge>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            <div className="flex justify-between items-center">
+                              <span>{log.content}</span>
+                              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${expandedId === log.id ? 'rotate-180' : ''}`} />
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                        {expandedId === log.id && (
+                          <TableRow className="bg-muted/30">
+                            <TableCell colSpan={4} className="p-0">
+                              <div className="p-4 overflow-x-auto max-h-[400px]">
+                                <pre className="text-[11px] font-mono bg-black/5 p-3 rounded-md text-slate-700">
+                                  {JSON.stringify(log.rawPayload, null, 2)}
+                                </pre>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </>
                     ))
                   )}
                 </TableBody>
