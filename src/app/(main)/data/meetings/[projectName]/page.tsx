@@ -37,7 +37,7 @@ export default function ProjectMainPage({ params }: { params: Promise<{ projectN
     { name: `${projectName}_NOTION_API_KEY`, value: "" },
     { name: `${projectName}_NOTION_PAGE_ID`, value: "" },
     { name: `${projectName}_GITHUB_REPO`, value: "khsqowp/my_playground" },
-    { name: `${projectName}_PROJECT_WEBHOOK_SLUG`, value: "" },
+    { name: `${projectName}_PROJECT_WEBHOOK_URL`, value: "" },
     { name: `${projectName}_DISCORD_WEBHOOK_URL`, value: "" },
     { name: `${projectName}_MIDNIGHT_REPORT_TYPE`, value: "RAW" },
   ]);
@@ -167,7 +167,7 @@ export default function ProjectMainPage({ params }: { params: Promise<{ projectN
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">프로젝트 수집 설정</CardTitle>
             <CardDescription className="text-[11px]">
-              GitHub 웹훅 슬러그를 입력하면 자동으로 연결이 업데이트됩니다.
+              수신 웹훅 URL 전체를 입력하면 자동으로 이 프로젝트에 연결됩니다.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

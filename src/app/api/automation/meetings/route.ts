@@ -54,9 +54,10 @@ export async function POST(request: NextRequest) {
       if (!secret.name || !secret.value) continue;
       if (secret.value === "********") continue;
 
-      // 웹훅 슬러그 값 추출 (범용 이름으로 변경)
-      if (secret.name.includes("PROJECT_WEBHOOK_SLUG")) {
-        webhookSlug = secret.value;
+      // 웹훅 URL에서 슬러그 추출 (마지막 / 뒤의 값)
+      if (secret.name.includes("PROJECT_WEBHOOK_URL")) {
+        const parts = secret.value.split("/");
+        webhookSlug = parts[parts.length - 1];
       }
 
       await prisma.projectSetting.upsert({
