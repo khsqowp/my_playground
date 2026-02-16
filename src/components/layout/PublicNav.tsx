@@ -28,7 +28,7 @@ export function PublicNav() {
             <div className="container flex h-14 items-center">
                 <div className="mr-4 flex">
                     <Link href="/" className="mr-6 flex items-center space-x-2">
-                        <span className="font-bold sm:inline-block">보안으로 리팩토링중</span>
+                        <span className="font-bold sm:inline-block">보안으로 리다이렉트 중</span>
                     </Link>
                     <nav className="hidden md:flex items-center space-x-6 text-sm font-medium">
                         {routes.map((route) => (

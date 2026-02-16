@@ -106,7 +106,7 @@ export function Sidebar({ className }: SidebarProps) {
           <Link href="/dashboard" className="flex items-center gap-2">
             <Bot className="h-6 w-6 text-primary" />
             {!collapsed && (
-              <span className="font-bold text-primary">보안으로 리팩토링중</span>
+              <span className="font-bold text-primary">보안으로 리다이렉트 중</span>
             )}
           </Link>
         </div>

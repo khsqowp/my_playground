@@ -52,7 +52,7 @@ export function MobileNav() {
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-2">
                 <Bot className="h-6 w-6" />
-                <span className="font-bold">보안으로 리팩토링중</span>
+                <span className="font-bold">보안으로 리다이렉트 중</span>
               </div>
               <Button variant="ghost" size="icon" onClick={() => setOpen(false)}>
                 <X className="h-5 w-5" />

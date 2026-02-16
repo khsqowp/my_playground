@@ -23,7 +23,7 @@ export function Header() {
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b bg-background px-4">
       <div className="flex items-center gap-2">
         <MobileNav />
-        <h2 className="text-lg font-semibold md:hidden">보안으로 리팩토링중</h2>
+        <h2 className="text-lg font-semibold md:hidden">보안으로 리다이렉트 중</h2>
       </div>
 
       <div className="flex items-center gap-2">
