@@ -32,12 +32,21 @@ export default function BlogWritePage() {
   const [content, setContent] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [tags, setTags] = useState("");
-  const [visibility, setVisibility] = useState("PRIVATE");
+  const [visibility, setVisibility] = useState("PUBLIC");
   const [coverImage, setCoverImage] = useState("");
   const [published, setPublished] = useState(false);
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [createdAt, setCreatedAt] = useState("");
+  
+  // 기본 작성일: 오늘 오전 09:00 설정
+  const getDefaultDateTime = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}T09:00`;
+  };
+  const [createdAt, setCreatedAt] = useState(getDefaultDateTime());
 
   // 카테고리 추가 관련
   const [showNewCategory, setShowNewCategory] = useState(false);
@@ -54,8 +63,21 @@ export default function BlogWritePage() {
       .catch(() => { });
   }
 
+  // 최근 게시글의 카테고리 가져오기
+  function loadLastCategory() {
+    fetch("/api/blog?limit=1")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.posts && data.posts.length > 0 && data.posts[0].categoryId) {
+          setCategoryId(data.posts[0].categoryId);
+        }
+      })
+      .catch(() => { });
+  }
+
   useEffect(() => {
     loadCategories();
+    loadLastCategory();
   }, []);
 
   async function handleAddCategory() {
