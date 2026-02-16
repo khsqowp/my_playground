@@ -24,7 +24,7 @@ export default async function PublicBlogPage({
         where.category = { slug: params.category };
     }
 
-    const [posts, total, categories] = await Promise.all([
+    const [posts, totalPosts, allCategories] = await Promise.all([
         prisma.post.findMany({
             where,
             include: {
@@ -36,16 +36,13 @@ export default async function PublicBlogPage({
             skip: (page - 1) * limit,
             take: limit,
         }),
-        prisma.post.count({ where }),
-        prisma.category.findMany({
+        prisma.post.count({
             where: {
-                posts: {
-                    some: {
-                        published: true,
-                        visibility: "PUBLIC",
-                    },
-                },
-            },
+                published: true,
+                visibility: "PUBLIC",
+            }
+        }),
+        prisma.category.findMany({
             include: {
                 _count: {
                     select: {
@@ -58,54 +55,86 @@ export default async function PublicBlogPage({
                     }
                 }
             },
+            orderBy: { name: "asc" }
         }),
     ]);
 
     const totalPages = Math.ceil(total / limit);
 
     return (
-        <div className="space-y-8">
-            <div className="flex flex-col gap-4">
-                <h1 className="text-3xl font-bold tracking-tight">블로그</h1>
-                <p className="text-muted-foreground">
-                    개발, 보안, 그리고 일상에 대한 기록
+        <div className="max-w-6xl mx-auto px-4 py-8 space-y-10">
+            {/* Header Section */}
+            <div className="text-center space-y-4">
+                <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
+                    블로그
+                </h1>
+                <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+                    지식의 공유와 기록, 더 나은 내일을 위한 기술 블로그
                 </p>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-                <Link href="/blog">
-                    <Badge
-                        variant={!params.category ? "default" : "outline"}
-                        className="text-sm py-1 px-3"
-                    >
-                        전체
-                    </Badge>
-                </Link>
-                {categories.map((cat) => (
-                    <Link key={cat.id} href={`/blog?category=${cat.slug}`}>
+            {/* Categories Section */}
+            <div className="bg-muted/30 p-6 rounded-xl border border-border/50">
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-primary" />
+                        카테고리 탐색
+                    </h2>
+                    <span className="text-xs text-muted-foreground">총 {totalPosts}개의 포스트</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    <Link href="/blog">
                         <Badge
-                            variant={params.category === cat.slug ? "default" : "outline"}
-                            className="text-sm py-1 px-3"
+                            variant={!params.category ? "default" : "secondary"}
+                            className={cn(
+                                "text-sm py-1.5 px-4 cursor-pointer transition-all hover:scale-105",
+                                !params.category && "shadow-md"
+                            )}
                         >
-                            {cat.name} ({cat._count.posts})
+                            전체 ({totalPosts})
                         </Badge>
                     </Link>
-                ))}
+                    {allCategories.filter(cat => cat._count.posts > 0).map((cat) => (
+                        <Link key={cat.id} href={`/blog?category=${cat.slug}`}>
+                            <Badge
+                                variant={params.category === cat.slug ? "default" : "secondary"}
+                                className={cn(
+                                    "text-sm py-1.5 px-4 cursor-pointer transition-all hover:scale-105",
+                                    params.category === cat.slug && "shadow-md"
+                                )}
+                                style={params.category !== cat.slug && cat.color ? { 
+                                    borderLeft: `3px solid ${cat.color}`,
+                                    paddingLeft: '10px'
+                                } : {}}
+                            >
+                                {cat.name} ({cat._count.posts})
+                            </Badge>
+                        </Link>
+                    ))}
+                </div>
             </div>
 
-            <PostList
-                posts={posts.map((p) => ({
-                    ...p,
-                    createdAt: p.createdAt.toISOString(),
-                }))}
-                basePath="/blog"
-            />
+            {/* Posts List Section */}
+            <div className="space-y-6">
+                <div className="flex items-center gap-2 border-b pb-2">
+                    <h3 className="text-lg font-bold">
+                        {params.category ? `${allCategories.find(c => c.slug === params.category)?.name} 포스트` : "최신 포스트"}
+                    </h3>
+                </div>
+                <PostList
+                    posts={posts.map((p) => ({
+                        ...p,
+                        createdAt: p.createdAt.toISOString(),
+                    }))}
+                    basePath="/blog"
+                />
+            </div>
 
             {totalPages > 1 && (
-                <div className="flex justify-center gap-2 mt-8">
+                <div className="flex justify-center gap-2 mt-12 pt-8 border-t">
                     {Array.from({ length: totalPages }, (_, i) => (
                         <Link key={i} href={`/blog?page=${i + 1}${params.category ? `&category=${params.category}` : ""}`}>
-                            <Button variant={page === i + 1 ? "default" : "outline"} size="sm">
+                            <Button variant={page === i + 1 ? "default" : "outline"} size="sm" className="w-10">
                                 {i + 1}
                             </Button>
                         </Link>
@@ -115,3 +144,6 @@ export default async function PublicBlogPage({
         </div>
     );
 }
+
+// cn helper import was missing, adding it at the top
+import { cn } from "@/lib/utils";
