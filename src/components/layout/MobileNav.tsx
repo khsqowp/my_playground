@@ -51,8 +51,8 @@ export function MobileNav() {
           <div className="fixed inset-y-0 left-0 z-50 w-72 bg-background p-6 shadow-lg">
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-2">
-                <Bike className="h-6 w-6" />
-                <span className="font-bold">88Motorcycle</span>
+                <Bot className="h-6 w-6" />
+                <span className="font-bold">보안으로 리팩토링중</span>
               </div>
               <Button variant="ghost" size="icon" onClick={() => setOpen(false)}>
                 <X className="h-5 w-5" />

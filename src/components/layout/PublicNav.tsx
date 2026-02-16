@@ -27,8 +27,8 @@ export function PublicNav() {
         <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <div className="container flex h-14 items-center">
                 <div className="mr-4 flex">
-                    <Link href="/blog" className="mr-6 flex items-center space-x-2">
-                        <span className="font-bold sm:inline-block">88MOTORCYCLE</span>
+                    <Link href="/" className="mr-6 flex items-center space-x-2">
+                        <span className="font-bold sm:inline-block">보안으로 리팩토링중</span>
                     </Link>
                     <nav className="hidden md:flex items-center space-x-6 text-sm font-medium">
                         {routes.map((route) => (

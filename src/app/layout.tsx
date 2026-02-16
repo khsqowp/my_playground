@@ -8,8 +8,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "88Motorcycle",
-  description: "Personal integrated platform - Data Hub, Blog, Archive, Automation",
+  title: "보안으로 리팩토링중",
+  description: "개인 기술 실습 및 보안 테스팅을 위한 실험실(놀이터)",
 };
 
 export default function RootLayout({
