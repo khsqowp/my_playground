@@ -158,10 +158,30 @@ export async function POST(request: NextRequest) {
     const slug = await ensureUniqueSlug(baseSlug);
 
     // Handle tags - create if not exist, then connect
+    let inputTags = body.tags || [];
+    
+    // AI Auto-tagging: If no tags provided, generate them using AI
+    if (inputTags.length === 0 && process.env.GEMINI_API_KEY) {
+      try {
+        const { callGemini } = await import("@/lib/ai");
+        const prompt = `
+          다음 블로그 글의 내용을 분석하여 가장 적절한 해시태그 5~10개를 추출해줘.
+          결과는 오직 콤마(,)로 구분된 단어들만 출력해.
+          
+          글 제목: ${body.title}
+          글 내용: ${body.content.substring(0, 1000)}
+        `;
+        const aiResponse = await callGemini(prompt, process.env.GEMINI_API_KEY);
+        inputTags = aiResponse.split(",").map(t => t.trim()).filter(Boolean);
+      } catch (err) {
+        console.error("AI Auto-tagging failed:", err);
+      }
+    }
+
     let tagConnections: any = undefined;
-    if (body.tags && body.tags.length > 0) {
+    if (inputTags.length > 0) {
       // Create tags that don't exist
-      const tagPromises = body.tags.map(async (tagName) => {
+      const tagPromises = inputTags.map(async (tagName) => {
         const tag = await prisma.tag.upsert({
           where: { name: tagName },
           update: {},

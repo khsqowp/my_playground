@@ -53,8 +53,8 @@ async function autoTagPosts(client, model) {
             log(`Analyzing tags for post: ${post.title}`);
             
             const prompt = `
-                다음 블로그 글의 내용을 분석하여 가장 적절한 해시태그 3~5개를 추출해줘.
-                결과는 오직 콤마(,)로 구분된 단어들만 출력해. 예: Docker,배포,CI/CD
+                다음 블로그 글의 내용을 분석하여 가장 적절한 해시태그 5~10개를 추출해줘.
+                결과는 오직 콤마(,)로 구분된 단어들만 출력해. 예: Docker,배포,CI/CD,Next.js,서버
                 
                 글 제목: ${post.title}
                 글 내용: ${post.content.substring(0, 1000)}
