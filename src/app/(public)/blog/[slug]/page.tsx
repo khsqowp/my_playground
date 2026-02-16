@@ -16,15 +16,19 @@ export default async function PublicBlogPostPage({
 }: {
     params: Promise<{ slug: string }>;
 }) {
-    const { slug } = await params;
+    const rawSlug = (await params).slug;
+    const slug = decodeURIComponent(rawSlug); // 한글 슬러그 디코딩 추가
     const session = await auth();
 
+    // 사용자가 소유자인 경우 비공개 글도 볼 수 있도록 쿼리 조건 조정
+    const where: any = { slug };
+    if (!session?.user) {
+        where.published = true;
+        where.visibility = "PUBLIC";
+    }
+
     const post = await prisma.post.update({
-        where: {
-            slug,
-            published: true,
-            visibility: "PUBLIC",
-        },
+        where,
         data: { viewCount: { increment: 1 } },
         include: {
             author: { select: { id: true, name: true } },
