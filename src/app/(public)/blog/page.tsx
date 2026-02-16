@@ -59,7 +59,7 @@ export default async function PublicBlogPage({
         }),
     ]);
 
-    const totalPages = Math.ceil(total / limit);
+    const totalPages = Math.ceil(totalPosts / limit);
 
     return (
         <div className="max-w-6xl mx-auto px-4 py-8 space-y-10">
