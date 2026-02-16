@@ -114,7 +114,7 @@ export default function BlogWritePage() {
       if (!res.ok) throw new Error("Failed to save");
       const data = await res.json();
       toast.success(shouldPublish ? "글이 발행되었습니다!" : "임시저장되었습니다!");
-      router.push(`/blog/${data.slug}`);
+      router.push("/manage/blog");
     } catch {
       toast.error("글 저장에 실패했습니다");
     } finally {
