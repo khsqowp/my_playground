@@ -23,6 +23,7 @@ const navItems = [
   { title: "대시보드", href: "/dashboard", icon: LayoutDashboard },
   { title: "블로그", href: "/manage/blog", icon: PenSquare },
   { title: "포트폴리오", href: "/manage/portfolio", icon: BookOpen },
+  { title: "페르소나 AI", href: "/persona", icon: Bot },
   { title: "아카이브", href: "/archive", icon: BookOpen },
   { title: "자동화", href: "/automation", icon: Zap },
   { title: "도구", href: "/tools", icon: Wrench },

@@ -59,6 +59,11 @@ const navItems = [
     icon: Zap,
   },
   {
+    title: "페르소나 AI",
+    href: "/persona",
+    icon: Bot,
+  },
+  {
     title: "도구",
     href: "/tools",
     icon: Wrench,
