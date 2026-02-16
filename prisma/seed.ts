@@ -21,6 +21,7 @@ async function main() {
       password: hashedPassword,
       name: process.env.ADMIN_NAME || "관리자",
       role: "OWNER",
+      status: "APPROVED",
     },
   });
   console.log(`✅ 관리자: ${admin.email}`);

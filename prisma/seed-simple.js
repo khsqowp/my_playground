@@ -23,6 +23,7 @@ async function main() {
       password: hashedPassword,
       name: name,
       role: "OWNER",
+      status: "APPROVED",
     },
   });
 

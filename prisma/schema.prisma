@@ -15,6 +15,8 @@ model User {
   email         String    @unique
   password      String
   name          String
+  phone         String?   // 연락처 필드 추가
+  status        UserStatus @default(PENDING) // 기본값은 승인 대기
   role          Role      @default(USER)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -31,6 +33,12 @@ model User {
   aiPrompts     AiPrompt[]
   shareLinks    ShareLink[]
   portfolios    Portfolio[]
+}
+
+enum UserStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum Role {
