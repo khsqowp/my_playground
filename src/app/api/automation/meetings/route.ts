@@ -69,6 +69,14 @@ export async function POST(request: NextRequest) {
         }
       });
     }
+
+    // [핵심 추가] 저장 시 웹훅 연결 확인 및 수정
+    // 슬러그가 zljno6...인 웹훅이 있다면 이 프로젝트에 강제 연결
+    await prisma.incomingWebhook.updateMany({
+      where: { slug: "zljno60o6phsajausdkbq" },
+      data: { projectId: project.id }
+    });
+
     return NextResponse.json({ success: true });
   }
 
