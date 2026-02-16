@@ -7,12 +7,12 @@ import {
   Github, 
   Database, 
   MessageSquare,
-  Send,
   FileText,
   Clock,
   Plus,
   Download,
-  ChevronDown
+  ChevronDown,
+  Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,6 +73,25 @@ export default function DailyLogPage({ params }: { params: Promise<{ projectName
     }
   };
 
+  const handleDeleteAll = async () => {
+    if (!confirm(`정말로 ${date}의 모든 기록을 삭제하시겠습니까? 데이터는 다시 불러올 수 있습니다.`)) return;
+
+    try {
+      const res = await fetch(`/api/automation/meetings/daily?project=${projectName}&date=${date}`, {
+        method: "DELETE"
+      });
+
+      if (res.ok) {
+        toast.success("기록이 삭제되었습니다.");
+        setLogs([]);
+      } else {
+        toast.error("삭제에 실패했습니다.");
+      }
+    } catch (error) {
+      toast.error("오류가 발생했습니다.");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 mb-2">
@@ -93,13 +112,17 @@ export default function DailyLogPage({ params }: { params: Promise<{ projectName
           <p className="text-sm text-muted-foreground">이 날의 Git 커밋 및 Notion 변경 이력입니다.</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="destructive" size="sm" onClick={handleDeleteAll}>
+            <Trash2 className="h-4 w-4 mr-2" />
+            기록 삭제
+          </Button>
           <Button variant="secondary" size="sm" onClick={() => handleSendReport("SUMMARY")}>
             <MessageSquare className="h-4 w-4 mr-2" />
-            이 날의 요약본 발송
+            요약본 발송
           </Button>
           <Button variant="outline" size="sm" onClick={() => handleSendReport("RAW")}>
             <FileText className="h-4 w-4 mr-2" />
-            원본 데이터 발송
+            원본 발송
           </Button>
         </div>
       </div>
@@ -201,11 +224,8 @@ export default function DailyLogPage({ params }: { params: Promise<{ projectName
                 <div className="flex items-center justify-between group">
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-blue-500" />
-                    <span className="text-sm truncate max-w-[150px]">meeting_stt.txt</span>
+                    <span className="text-sm truncate max-w-[150px]">준비 중...</span>
                   </div>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Download className="h-4 w-4" />
-                  </Button>
                 </div>
               </div>
             </CardContent>
