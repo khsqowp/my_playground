@@ -6,11 +6,14 @@ export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { searchParams } = new URL(request.url);
-  const month = searchParams.get("month"); // YYYY-MM
-
-  const project = await prisma.project.findUnique({
+  // 프로젝트를 조회하고, 없으면 생성합니다. (Upsert)
+  const project = await prisma.project.upsert({
     where: { name: "SK_ROOKIES_FINAL_PJT" },
+    update: {},
+    create: {
+      name: "SK_ROOKIES_FINAL_PJT",
+      description: "SK Rookies Final Project tracking"
+    },
     include: {
       activityLogs: {
         orderBy: { eventTime: "desc" },
@@ -32,18 +35,23 @@ export async function POST(request: NextRequest) {
 
   const { type, data } = await request.json();
 
-  const project = await prisma.project.findUnique({
-    where: { name: "SK_ROOKIES_FINAL_PJT" }
+  const project = await prisma.project.upsert({
+    where: { name: "SK_ROOKIES_FINAL_PJT" },
+    update: {},
+    create: {
+      name: "SK_ROOKIES_FINAL_PJT",
+      description: "SK Rookies Final Project tracking"
+    }
   });
-
-  if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
   if (type === "SETTINGS") {
     const { secrets } = data;
     
-    // Upsert each secret
     for (const secret of secrets) {
       if (!secret.name || !secret.value) continue;
+      // 마스킹된 값(********)은 저장하지 않음
+      if (secret.value === "********") continue;
+
       await prisma.projectSetting.upsert({
         where: {
           projectId_key: {
