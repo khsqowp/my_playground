@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-const publicPaths = ["/login", "/guest", "/api/auth", "/blog", "/portfolio", "/api/public"];
+const publicPaths = ["/login", "/guest", "/api/auth", "/blog", "/portfolio", "/api/public", "/api/hooks"];
 const sharePaths = ["/share/"];
 
 export async function middleware(request: NextRequest) {

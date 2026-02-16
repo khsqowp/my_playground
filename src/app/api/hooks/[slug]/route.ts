@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import crypto from "crypto";
 
 export async function POST(
     request: NextRequest,
@@ -7,31 +8,55 @@ export async function POST(
 ) {
     const slug = (await params).slug;
 
+    // 1. 웹훅 존재 여부 확인
     const webhook = await prisma.incomingWebhook.findUnique({
         where: { slug },
+        include: {
+            project: {
+                include: {
+                    settings: true
+                }
+            }
+        }
     });
 
     if (!webhook || !webhook.enabled) {
         return NextResponse.json({ error: "Webhook not found or disabled" }, { status: 404 });
     }
 
-    // Parse payload
-    let payload = {};
+    // 2. 페이로드 파싱
+    const rawBody = await request.text();
+    let payload: any = {};
     try {
-        const text = await request.text();
-        if (text) {
-            try {
-                payload = JSON.parse(text);
-            } catch {
-                payload = { raw: text };
-            }
-        }
-    } catch (e) {
-        console.error("Failed to parse webhook payload", e);
+        payload = JSON.parse(rawBody);
+    } catch {
+        payload = { raw: rawBody };
     }
 
-    // Create log
-    await prisma.webhookLog.create({
+    // 3. GitHub 서명 검증 (Secret이 설정된 경우)
+    const signature = request.headers.get("x-hub-signature-256");
+    if (signature && webhook.project) {
+        const githubSecret = webhook.project.settings.find(
+            s => s.key === "SK_ROOKIES_FINAL_PJT_GITHUB_WEBHOOK_SECRET"
+        )?.value || process.env.SK_ROOKIES_FINAL_PJT_GITHUB_WEBHOOK_SECRET;
+
+        if (githubSecret) {
+            const hmac = crypto.createHmac("sha256", githubSecret);
+            const digest = "sha256=" + hmac.update(rawBody).digest("hex");
+            
+            try {
+                if (!crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(signature))) {
+                    console.error("Invalid GitHub signature");
+                    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+                }
+            } catch (e) {
+                return NextResponse.json({ error: "Signature verification failed" }, { status: 401 });
+            }
+        }
+    }
+
+    // 4. 일반 로그 저장 (WebhookLog)
+    const log = await prisma.webhookLog.create({
         data: {
             incomingWebhookId: webhook.id,
             direction: "INCOMING",
@@ -41,5 +66,39 @@ export async function POST(
         },
     });
 
-    return NextResponse.json({ success: true });
+    // 5. 프로젝트 활동 로그 저장 (ProjectActivityLog)
+    if (webhook.projectId) {
+        let action = "WEBHOOK_EVENT";
+        let content = "외부 웹훅 이벤트 발생";
+        const platform = request.headers.get("x-github-event") ? "GITHUB" : "EXTERNAL";
+
+        if (platform === "GITHUB") {
+            const event = request.headers.get("x-github-event");
+            action = event?.toUpperCase() || "GITHUB_EVENT";
+            
+            if (event === "push") {
+                const branch = payload.ref?.split("/").pop();
+                const commitMsg = payload.head_commit?.message || "No message";
+                const author = payload.head_commit?.author?.name || "Unknown";
+                content = `[${branch}] ${commitMsg} (by ${author})`;
+            } else if (event === "ping") {
+                content = "GitHub 웹훅 연결 성공 (Ping)";
+            } else {
+                content = `GitHub 이벤트 발생: ${event}`;
+            }
+        }
+
+        await prisma.projectActivityLog.create({
+            data: {
+                projectId: webhook.projectId,
+                platform,
+                action,
+                content,
+                rawPayload: payload as any,
+                eventTime: new Date(),
+            }
+        });
+    }
+
+    return NextResponse.json({ success: true, logId: log.id });
 }

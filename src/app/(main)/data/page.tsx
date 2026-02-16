@@ -39,6 +39,17 @@ export default async function DataPage() {
             </CardContent>
           </Card>
         </Link>
+        <Link href="/data/meetings">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
+            <CardHeader className="flex flex-row items-center gap-2 pb-2">
+              <Database className="h-5 w-5 text-green-500" />
+              <CardTitle className="text-base">회의기록 수집 (Meetings)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">노션/깃허브 활동 및 회의 로그 수집</p>
+            </CardContent>
+          </Card>
+        </Link>
 
         {/* Existing Links */}
         <Link href="/data/memo">

@@ -280,6 +280,9 @@ model IncomingWebhook {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
   logs      WebhookLog[]
   
   createdAt DateTime @default(now())
@@ -390,4 +393,76 @@ model Portfolio {
 
   @@index([slug])
   @@index([visibility, published])
+}
+
+// ==================== 프로젝트 및 회의 관리 ====================
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sessions    MeetingSession[]
+  activityLogs ProjectActivityLog[]
+  settings    ProjectSetting[]
+  webhooks    IncomingWebhook[]
+}
+
+model MeetingSession {
+  id          String   @id @default(cuid())
+  title       String
+  date        DateTime @default(now())
+  description String?  @db.Text
+  
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  attachments ProjectAttachment[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+model ProjectActivityLog {
+  id          String   @id @default(cuid())
+  platform    String   // GITHUB, NOTION, etc.
+  action      String   // COMMIT, PAGE_UPDATE, etc.
+  content     String   @db.Text
+  rawPayload  Json?
+  eventTime   DateTime @default(now())
+
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+
+  @@index([projectId, eventTime])
+}
+
+model ProjectAttachment {
+  id          String   @id @default(cuid())
+  fileName    String
+  filePath    String
+  fileType    String   // STT, DOCUMENT, etc.
+  fileSize    Int?
+  
+  sessionId   String?
+  session     MeetingSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime @default(now())
+}
+
+model ProjectSetting {
+  id          String   @id @default(cuid())
+  key         String   // SK_ROOKIES_FINAL_PJT_DISCORD_WEBHOOK_URL 등
+  value       String   @db.Text
+  isSecret    Boolean  @default(true)
+
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, key])
 }
