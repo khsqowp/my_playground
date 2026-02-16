@@ -14,6 +14,7 @@ import {
   Settings,
   Menu,
   Bike,
+  Bot,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
