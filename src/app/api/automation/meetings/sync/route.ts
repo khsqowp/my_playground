@@ -25,29 +25,124 @@ export async function POST(request: NextRequest) {
           include: { settings: true }
         });
 
-        // 프로젝트별 키 조회 (프로젝트 이름이 키의 접두어로 쓰일 수 있으므로 동적 조회)
-        const notionKey = project.settings.find(s => s.key.includes("NOTION_API_KEY"))?.value;
-        const notionPageId = project.settings.find(s => s.key.includes("NOTION_PAGE_ID"))?.value;
+        const getSecret = (keyPart: string) => project.settings.find(s => s.key.includes(keyPart))?.value;
         
-        sendStatus(20, `[${projectName}] 데이터 동기화 시작...`);
-        await new Promise(r => setTimeout(r, 500));
-        
-        if (notionKey && notionPageId) {
-            sendStatus(50, "Notion 데이터 수집 중...");
-            await new Promise(r => setTimeout(r, 1000));
+        const notionKey = getSecret("NOTION_API_KEY");
+        const notionPageId = getSecret("NOTION_PAGE_ID");
+        const githubRepo = getSecret("GITHUB_REPO") || "khsqowp/my_playground";
+
+        // --- 1. GitHub 커밋 수집 ---
+        sendStatus(20, "GitHub 커밋 내역 수집 중...");
+        try {
+          const ghRes = await fetch(`https://api.github.com/repos/${githubRepo}/commits?per_page=30`, {
+            headers: { "Accept": "application/vnd.github.v3+json" }
+          });
+          
+          if (ghRes.ok) {
+            const commits = await ghRes.json();
+            let addedCount = 0;
+            
+            for (const c of commits) {
+              const externalId = c.sha;
+              const content = `[${githubRepo}] ${c.commit.message} (by ${c.commit.author.name})`;
+              
+              const existing = await prisma.projectActivityLog.findUnique({
+                where: { 
+                  projectId_platform_externalId: {
+                    projectId: project.id,
+                    platform: "GITHUB",
+                    externalId: externalId
+                  }
+                }
+              });
+
+              if (!existing) {
+                await prisma.projectActivityLog.create({
+                  data: {
+                    projectId: project.id,
+                    platform: "GITHUB",
+                    action: "COMMIT",
+                    content,
+                    externalId,
+                    eventTime: new Date(c.commit.author.date),
+                    rawPayload: c
+                  }
+                });
+                addedCount++;
+              }
+            }
+            sendStatus(50, `GitHub 동기화 완료 (${addedCount}개 추가됨)`);
+          } else {
+            sendStatus(50, "GitHub 접근 실패 (공개 저장소인지 확인하세요)");
+          }
+        } catch (e) {
+          console.error("GitHub Sync Error", e);
+          sendStatus(50, "GitHub 동기화 중 오류 발생");
         }
 
-        await prisma.projectActivityLog.create({
-          data: {
-            projectId: project.id,
-            platform: "SYSTEM",
-            action: "SYNC",
-            content: `[${projectName}] 수동 동기화 완료`,
-            eventTime: new Date()
-          }
-        });
+        // --- 2. Notion 편집 내역 수집 ---
+        sendStatus(60, "Notion 편집 내역 수집 중...");
+        if (notionKey && notionPageId) {
+          try {
+            // Notion API 호출 (페이지 블록 조회)
+            const ntRes = await fetch(`https://api.notion.com/v1/blocks/${notionPageId}/children?page_size=100`, {
+              headers: {
+                "Authorization": `Bearer ${notionKey}`,
+                "Notion-Version": "2022-06-28"
+              }
+            });
 
-        sendStatus(100, "완료!");
+            if (ntRes.ok) {
+              const data = await ntRes.json();
+              let ntAddedCount = 0;
+
+              for (const block of data.results) {
+                const externalId = block.id;
+                const lastEdited = new Date(block.last_edited_time);
+                
+                // 블록 타입에 따른 간단한 요약
+                const type = block.type;
+                const text = block[type]?.rich_text?.[0]?.plain_text || "내용 없음";
+                const content = `[Notion] ${type} 수정: ${text.substring(0, 30)}...`;
+
+                const existing = await prisma.projectActivityLog.findUnique({
+                  where: { 
+                    projectId_platform_externalId: {
+                      projectId: project.id,
+                      platform: "NOTION",
+                      externalId: externalId
+                    }
+                  }
+                });
+
+                if (!existing) {
+                  await prisma.projectActivityLog.create({
+                    data: {
+                      projectId: project.id,
+                      platform: "NOTION",
+                      action: "PAGE_UPDATE",
+                      content,
+                      externalId,
+                      eventTime: lastEdited,
+                      rawPayload: block
+                    }
+                  });
+                  ntAddedCount++;
+                }
+              }
+              sendStatus(90, `Notion 동기화 완료 (${ntAddedCount}개 항목 업데이트)`);
+            } else {
+              sendStatus(90, "Notion API 응답 오류 (키와 페이지ID를 확인하세요)");
+            }
+          } catch (e) {
+            console.error("Notion Sync Error", e);
+            sendStatus(90, "Notion 동기화 중 오류 발생");
+          }
+        } else {
+          sendStatus(90, "Notion 설정이 없어 건너뜁니다.");
+        }
+
+        sendStatus(100, "전체 데이터 동기화 완료!");
         controller.close();
       } catch (error: any) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
