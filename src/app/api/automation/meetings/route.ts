@@ -6,13 +6,15 @@ export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // 프로젝트를 조회하고, 없으면 생성합니다. (Upsert)
+  const { searchParams } = new URL(request.url);
+  const projectName = searchParams.get("project") || "SK_ROOKIES_FINAL_PJT";
+
   const project = await prisma.project.upsert({
-    where: { name: "SK_ROOKIES_FINAL_PJT" },
+    where: { name: projectName },
     update: {},
     create: {
-      name: "SK_ROOKIES_FINAL_PJT",
-      description: "SK Rookies Final Project tracking"
+      name: projectName,
+      description: `${projectName} 프로젝트 관제 센터`
     },
     include: {
       activityLogs: {
@@ -33,15 +35,15 @@ export async function POST(request: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const { searchParams } = new URL(request.url);
+  const projectName = searchParams.get("project") || "SK_ROOKIES_FINAL_PJT";
+  
   const { type, data } = await request.json();
 
   const project = await prisma.project.upsert({
-    where: { name: "SK_ROOKIES_FINAL_PJT" },
+    where: { name: projectName },
     update: {},
-    create: {
-      name: "SK_ROOKIES_FINAL_PJT",
-      description: "SK Rookies Final Project tracking"
-    }
+    create: { name: projectName }
   });
 
   if (type === "SETTINGS") {
@@ -49,7 +51,6 @@ export async function POST(request: NextRequest) {
     
     for (const secret of secrets) {
       if (!secret.name || !secret.value) continue;
-      // 마스킹된 값(********)은 저장하지 않음
       if (secret.value === "********") continue;
 
       await prisma.projectSetting.upsert({

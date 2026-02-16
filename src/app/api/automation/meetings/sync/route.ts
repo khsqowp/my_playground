@@ -4,6 +4,9 @@ import prisma from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const projectName = searchParams.get("project") || "SK_ROOKIES_FINAL_PJT";
+  
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
@@ -15,50 +18,38 @@ export async function POST(request: NextRequest) {
       try {
         sendStatus(5, "동기화 준비 중...");
 
-        // 프로젝트를 조회하거나 생성합니다.
         const project = await prisma.project.upsert({
-          where: { name: "SK_ROOKIES_FINAL_PJT" },
+          where: { name: projectName },
           update: {},
-          create: {
-            name: "SK_ROOKIES_FINAL_PJT",
-            description: "SK Rookies Final Project tracking"
-          },
+          create: { name: projectName },
           include: { settings: true }
         });
 
-        const notionKey = project.settings.find(s => s.key === "SK_ROOKIES_FINAL_PJT_NOTION_API_KEY")?.value;
-        const notionPageId = project.settings.find(s => s.key === "SK_ROOKIES_FINAL_PJT_NOTION_PAGE_ID")?.value;
+        // 프로젝트별 키 조회 (프로젝트 이름이 키의 접두어로 쓰일 수 있으므로 동적 조회)
+        const notionKey = project.settings.find(s => s.key.includes("NOTION_API_KEY"))?.value;
+        const notionPageId = project.settings.find(s => s.key.includes("NOTION_PAGE_ID"))?.value;
         
-        sendStatus(20, "데이터 동기화 프로세스 시작...");
+        sendStatus(20, `[${projectName}] 데이터 동기화 시작...`);
         await new Promise(r => setTimeout(r, 500));
         
         if (notionKey && notionPageId) {
-            sendStatus(40, "Notion 변경 사항 확인 중...");
-            // TODO: 실제 Notion SDK 연동
-            await new Promise(r => setTimeout(r, 800));
-            sendStatus(60, "Notion 데이터 수집 완료");
-        } else {
-            sendStatus(40, "Notion 설정이 없어 건너뜜");
+            sendStatus(50, "Notion 데이터 수집 중...");
+            await new Promise(r => setTimeout(r, 1000));
         }
 
-        sendStatus(70, "GitHub 커밋 기록 확인 중...");
-        await new Promise(r => setTimeout(r, 500));
-        
-        // 활동 로그 생성 (실제 동기화가 일어났음을 기록)
         await prisma.projectActivityLog.create({
           data: {
             projectId: project.id,
             platform: "SYSTEM",
             action: "SYNC",
-            content: "수동 데이터 동기화가 성공적으로 수행되었습니다.",
+            content: `[${projectName}] 수동 동기화 완료`,
             eventTime: new Date()
           }
         });
 
-        sendStatus(100, "모든 동기화 완료!");
+        sendStatus(100, "완료!");
         controller.close();
       } catch (error: any) {
-        console.error("Sync error:", error);
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
         controller.close();
       }

@@ -6,22 +6,26 @@ export async function POST(request: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { type } = await request.json(); // "SUMMARY" or "RAW"
+  const { searchParams } = new URL(request.url);
+  const projectName = searchParams.get("project") || "SK_ROOKIES_FINAL_PJT";
+  
+  const { type } = await request.json();
 
   const project = await prisma.project.findUnique({
-    where: { name: "SK_ROOKIES_FINAL_PJT" },
+    where: { name: projectName },
     include: {
       settings: true,
       activityLogs: {
-        orderBy: { eventTime: "asc" }, // 시간순 정렬
-        take: 100 // 최근 100건
+        orderBy: { eventTime: "asc" },
+        take: 100
       }
     }
   });
 
   if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
-  const webhookUrl = project.settings.find(s => s.key === "SK_ROOKIES_FINAL_PJT_DISCORD_WEBHOOK_URL")?.value;
+  // 해당 프로젝트의 디스코드 웹훅 조회
+  const webhookUrl = project.settings.find(s => s.key.includes("DISCORD_WEBHOOK_URL"))?.value;
 
   if (!webhookUrl) {
     return NextResponse.json({ error: "Discord 웹훅 URL이 설정되지 않았습니다." }, { status: 400 });
@@ -48,10 +52,9 @@ export async function POST(request: NextRequest) {
     });
 
     const blob = new Blob([markdown], { type: 'text/markdown' });
-    formData.append('file', blob, `summary_${dateStr}.md`);
-    formData.append('payload_json', JSON.stringify({ content: `✅ [${dateStr}] 즉시 요청된 요약 보고서입니다.` }));
+    formData.append('file', blob, `summary_${project.name}_${dateStr}.md`);
+    formData.append('payload_json', JSON.stringify({ content: `✅ [${project.name}] 요약 보고서 도착.` }));
   } else {
-    // RAW 방식: 텍스트 리스트 + JSON 파일
     let textLog = `[${project.name} Activity Logs - ${dateStr}]\n\n`;
     project.activityLogs.forEach((l: any) => {
         textLog += `[${l.eventTime.toLocaleString()}] [${l.platform}] [${l.action}] ${l.content}\n`;
@@ -60,9 +63,9 @@ export async function POST(request: NextRequest) {
     const textBlob = new Blob([textLog], { type: 'text/plain' });
     const jsonBlob = new Blob([JSON.stringify(project.activityLogs, null, 2)], { type: 'application/json' });
 
-    formData.append('file0', textBlob, `logs_${dateStr}.txt`);
-    formData.append('file1', jsonBlob, `payloads_${dateStr}.json`);
-    formData.append('payload_json', JSON.stringify({ content: `📦 [${dateStr}] 즉시 요청된 원본 데이터 패키지입니다.` }));
+    formData.append('file0', textBlob, `logs_${project.name}_${dateStr}.txt`);
+    formData.append('file1', jsonBlob, `payloads_${project.name}_${dateStr}.json`);
+    formData.append('payload_json', JSON.stringify({ content: `📦 [${project.name}] 원본 데이터 패키지 도착.` }));
   }
 
   try {
