@@ -9,12 +9,17 @@ export async function callGemini(
   apiKey: string,
   modelName = "gemini-1.5-flash"
 ): Promise<string> {
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: modelName });
-  
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  return response.text();
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    // 모델 이름을 명확하게 지정
+    const model = genAI.getGenerativeModel({ model: modelName });
+    
+    const result = await model.generateContent(prompt);
+    return result.response.text();
+  } catch (error: any) {
+    console.error("[GEMINI_API_ERROR]", error);
+    throw new Error(`AI 응답 생성 중 오류: ${error.message}`);
+  }
 }
 
 /**
