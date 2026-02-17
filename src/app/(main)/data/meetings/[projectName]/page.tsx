@@ -32,7 +32,6 @@ export default function ProjectMainPage({ params }: { params: Promise<{ projectN
   const [syncStatus, setSyncStatus] = useState("");
   
   const [dates, setDates] = useState<any[]>([]);
-  // 기본 설정 목록 (웹훅 슬러그 포함)
   const [secrets, setSecrets] = useState([
     { name: `${projectName}_NOTION_API_KEY`, value: "" },
     { name: `${projectName}_NOTION_PAGE_ID`, value: "" },
@@ -53,11 +52,12 @@ export default function ProjectMainPage({ params }: { params: Promise<{ projectN
         const data = await res.json();
         setDates(data.dateGroups || []);
         if (data.settings && data.settings.length > 0) {
+          // 마스킹 없이 실제 값을 그대로 매핑합니다.
           const mappedSettings = data.settings.map((s: any) => ({
             name: s.key,
-            value: s.isSecret ? "********" : s.value
+            value: s.value
           }));
-          // 기존 설정에 있는 값들로 덮어쓰기
+          
           setSecrets(prev => prev.map(p => {
             const found = mappedSettings.find((m: any) => m.name === p.name);
             return found ? found : p;
@@ -81,7 +81,7 @@ export default function ProjectMainPage({ params }: { params: Promise<{ projectN
       });
 
       if (res.ok) {
-        toast.success("설정이 저장되고 웹훅 연결이 업데이트되었습니다.");
+        toast.success("설정이 저장되었습니다.");
         setShowSettings(false);
         fetchDateGroups();
       }
@@ -176,7 +176,7 @@ export default function ProjectMainPage({ params }: { params: Promise<{ projectN
                 <div key={index} className="space-y-1.5">
                   <Label className="text-[10px] uppercase text-muted-foreground font-bold">{secret.name.split('_').slice(1).join(' ')}</Label>
                   <Input 
-                    type={secret.name.includes('KEY') || secret.name.includes('URL') ? "password" : "text"}
+                    type="text"
                     value={secret.value}
                     placeholder={secret.name}
                     onChange={(e) => {
