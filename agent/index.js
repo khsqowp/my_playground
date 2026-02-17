@@ -35,17 +35,19 @@ async function autoTagPosts(client, model) {
     log("Running Skill: Auto-tag Blog Posts...");
 
     try {
-        // 태그가 없는 포스트 조회
+        // 태그가 없거나 3개 미만인 공개 포스트를 대상으로 분석 (분석 범위 확대)
         const res = await client.query(`
             SELECT p.id, p.title, p.content 
             FROM "Post" p
             LEFT JOIN "TagOnPost" tp ON p.id = tp."postId"
-            WHERE tp."tagId" IS NULL AND p.published = true
+            WHERE p.published = true
+            GROUP BY p.id, p.title, p.content
+            HAVING COUNT(tp."tagId") < 3
             LIMIT 5
         `);
 
         if (res.rows.length === 0) {
-            log("No untagged posts found.");
+            log("No posts need tagging at this time.");
             return;
         }
 
@@ -53,29 +55,37 @@ async function autoTagPosts(client, model) {
             log(`Analyzing tags for post: ${post.title}`);
             
             const prompt = `
-                다음 블로그 글의 내용을 분석하여 가장 적절한 해시태그 5~10개를 추출해줘.
+                다음 블로그 글의 내용을 분석하여 가장 적절한 해시태그 5개를 추출해줘.
                 결과는 오직 콤마(,)로 구분된 단어들만 출력해. 예: Docker,배포,CI/CD,Next.js,서버
                 
                 글 제목: ${post.title}
-                글 내용: ${post.content.substring(0, 1000)}
+                글 내용: ${post.content.substring(0, 1500)}
             `;
 
             const result = await model.generateContent(prompt);
-            const tags = result.response.text().split(',').map(t => t.trim());
+            const responseText = result.response.text();
+            log(`Gemini response: ${responseText}`);
+            
+            const tags = responseText.split(',').map(t => t.trim()).filter(t => t.length > 0);
 
             for (const tagName of tags) {
-                const tagRes = await client.query(
-                    'INSERT INTO "Tag" (id, name) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET name = $2 RETURNING id',
-                    ['tag_' + Date.now() + Math.random().toString(36).substring(7), tagName]
+                // 태그 생성 또는 조회
+                const tagId = 'tag_' + Date.now() + Math.random().toString(36).substring(7);
+                await client.query(
+                    'INSERT INTO "Tag" (id, name) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id',
+                    [tagId, tagName]
                 );
-                const tagId = tagRes.rows[0].id;
+                
+                // 해당 태그의 실제 ID 가져오기 (이미 존재했을 경우 포함)
+                const realTagRes = await client.query('SELECT id FROM "Tag" WHERE name = $1', [tagName]);
+                const realTagId = realTagRes.rows[0].id;
 
                 await client.query(
                     'INSERT INTO "TagOnPost" ("postId", "tagId") VALUES ($1, $2) ON CONFLICT DO NOTHING',
-                    [post.id, tagId]
+                    [post.id, realTagId]
                 );
             }
-            log(`✅ Successfully tagged: ${post.title}`);
+            log(`✅ Successfully updated tags for: ${post.title}`);
         }
     } catch (err) {
         console.error("Error in autoTagPosts:", err);
