@@ -11,8 +11,11 @@ services:
       - "5433:5432" # Map container's DB port to host 5433 to avoid conflict with local postgres
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/88motorcycle
-      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ADMIN_NAME=${ADMIN_NAME}
     volumes:
       - monolith_data:/var/lib/postgresql/data
     restart: always
