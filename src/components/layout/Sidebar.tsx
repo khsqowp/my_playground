@@ -15,6 +15,8 @@ import {
   ChevronRight,
   Bike,
   Bot,
+  Users,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -55,9 +57,19 @@ const navItems = [
     icon: Database,
   },
   {
+    title: "사용자 관리",
+    href: "/manage/users",
+    icon: Users,
+  },
+  {
     title: "자동화",
     href: "/automation",
     icon: Zap,
+  },
+  {
+    title: "활동 로그",
+    href: "/automation/logs",
+    icon: Activity,
   },
   {
     title: "페르소나 AI",

@@ -92,9 +92,8 @@ async function main() {
     let model;
     if (process.env.GEMINI_API_KEY) {
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        // 모델 이름 문자열 확인 및 명시적 초기화
-        model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        log("Gemini API initialized.");
+        model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        log("Gemini API initialized (gemini-2.0-flash).");
     } else {
         log("⚠️ GEMINI_API_KEY is missing! Auto-tagging will not work.");
     }
