@@ -142,20 +142,6 @@ export default function ScannerHubPage() {
     }
   };
 
-  const runEncoder = async () => {
-    if (!encodeInput) return;
-    try {
-      const res = await fetch("/api/tools/scanner/encode", {
-        method: "POST",
-        body: JSON.stringify({ input: encodeInput })
-      });
-      const data = await res.json();
-      setEncodeOutput(data);
-    } catch (e) {
-      toast.error("인코딩 실패");
-    }
-  };
-
   const startScan = async (mode: string) => {
     if (!target.url) {
       toast.error("타겟 URL을 입력해주세요.");
