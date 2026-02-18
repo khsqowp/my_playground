@@ -8,6 +8,12 @@ const sharePaths = ["/share/"];
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Allow service-key requests (Discord bot, internal services)
+  const serviceKey = request.headers.get("x-service-key");
+  if (serviceKey && serviceKey === process.env.SERVICE_API_KEY && process.env.SERVICE_API_KEY) {
+    return NextResponse.next();
+  }
+
   // Allow public paths
   if (publicPaths.some((path) => pathname.startsWith(path))) {
     return NextResponse.next();

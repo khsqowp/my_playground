@@ -13,10 +13,17 @@ import {
   Trash2,
   Loader2,
   Search,
+  CheckCircle2,
+  XCircle,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
+import { cn } from "@/lib/utils";
+
+const BATCH_SIZE = 3;
+const ALLOWED_EXTENSIONS = ["zip", "pdf", "txt", "md", "docx", "xlsx", "pptx"];
 
 function FileIcon({ ext }: { ext: string }) {
   if (ext === "zip") return <FileArchive className="h-5 w-5 text-yellow-500" />;
@@ -46,13 +53,24 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// Upload queue item
+interface QueueItem {
+  file: File;
+  status: "waiting" | "uploading" | "done" | "error";
+  error?: string;
+}
+
 export default function ArchiveFilesPage() {
   const [files, setFiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Upload state
+  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 });
 
   const fetchFiles = (q = "") => {
     setLoading(true);
@@ -75,13 +93,42 @@ export default function ArchiveFilesPage() {
     fetchFiles(search);
   };
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []);
+    if (selected.length === 0) return;
 
-    setUploading(true);
+    const invalid = selected.filter((f) => {
+      const ext = f.name.split(".").pop()?.toLowerCase() || "";
+      return !ALLOWED_EXTENSIONS.includes(ext);
+    });
+
+    if (invalid.length > 0) {
+      toast.error(`지원하지 않는 파일 형식: ${invalid.map((f) => f.name).join(", ")}`);
+    }
+
+    const valid = selected.filter((f) => {
+      const ext = f.name.split(".").pop()?.toLowerCase() || "";
+      return ALLOWED_EXTENSIONS.includes(ext);
+    });
+
+    if (valid.length === 0) return;
+
+    const newQueue: QueueItem[] = valid.map((f) => ({ file: f, status: "waiting" }));
+    setQueue(newQueue);
+    setUploadProgress({ done: 0, total: valid.length });
+    startBatchUpload(newQueue);
+
+    // Reset input
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const uploadSingleFile = async (item: QueueItem, index: number): Promise<boolean> => {
+    setQueue((prev) =>
+      prev.map((q, i) => (i === index ? { ...q, status: "uploading" } : q))
+    );
+
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", item.file);
 
     try {
       const res = await fetch("/api/archive/files/upload", {
@@ -92,14 +139,50 @@ export default function ArchiveFilesPage() {
         const err = await res.json();
         throw new Error(err.error || "업로드 실패");
       }
-      toast.success("파일 업로드 및 AI 분석 완료!");
-      fetchFiles(search);
+      setQueue((prev) =>
+        prev.map((q, i) => (i === index ? { ...q, status: "done" } : q))
+      );
+      return true;
     } catch (err: any) {
-      toast.error(err.message || "업로드 중 오류가 발생했습니다.");
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      setQueue((prev) =>
+        prev.map((q, i) =>
+          i === index ? { ...q, status: "error", error: err.message } : q
+        )
+      );
+      return false;
     }
+  };
+
+  const startBatchUpload = async (items: QueueItem[]) => {
+    setIsUploading(true);
+    let doneCount = 0;
+
+    // Process in batches of BATCH_SIZE
+    for (let batchStart = 0; batchStart < items.length; batchStart += BATCH_SIZE) {
+      const batch = items.slice(batchStart, batchStart + BATCH_SIZE);
+      const batchIndices = batch.map((_, i) => batchStart + i);
+
+      // Upload batch in parallel
+      const results = await Promise.all(
+        batch.map((item, i) => uploadSingleFile(item, batchIndices[i]))
+      );
+
+      doneCount += results.filter(Boolean).length;
+      setUploadProgress({ done: doneCount, total: items.length });
+    }
+
+    const failed = items.length - doneCount;
+    if (failed > 0) {
+      toast.error(`${doneCount}개 업로드 완료, ${failed}개 실패`);
+    } else {
+      toast.success(`${doneCount}개 파일 업로드 및 AI 분석 완료!`);
+    }
+
+    setIsUploading(false);
+    fetchFiles(search);
+
+    // Clear queue after a delay
+    setTimeout(() => setQueue([]), 3000);
   };
 
   const handleDelete = async (id: string, fileName: string) => {
@@ -128,22 +211,69 @@ export default function ArchiveFilesPage() {
           <FileArchive className="h-6 w-6 text-primary" />
           파일 아카이브
         </h1>
-        <Button onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-          {uploading ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        <Button onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+          {isUploading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {uploadProgress.done}/{uploadProgress.total} 처리 중...
+            </>
           ) : (
-            <Upload className="mr-2 h-4 w-4" />
+            <>
+              <Upload className="mr-2 h-4 w-4" />
+              파일 업로드
+            </>
           )}
-          파일 업로드
         </Button>
         <input
           ref={fileInputRef}
           type="file"
           accept=".zip,.pdf,.txt,.md,.docx,.xlsx,.pptx"
-          onChange={handleUpload}
+          multiple
+          onChange={handleFileSelect}
           className="hidden"
         />
       </div>
+
+      {/* Upload Queue */}
+      {queue.length > 0 && (
+        <Card className="p-4">
+          <p className="text-sm font-medium mb-3">
+            업로드 진행 중 ({uploadProgress.done}/{uploadProgress.total})
+          </p>
+          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+            {queue.map((item, i) => (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                {item.status === "waiting" && (
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                )}
+                {item.status === "uploading" && (
+                  <Loader2 className="h-3.5 w-3.5 text-primary animate-spin shrink-0" />
+                )}
+                {item.status === "done" && (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                )}
+                {item.status === "error" && (
+                  <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />
+                )}
+                <span
+                  className={cn(
+                    "truncate",
+                    item.status === "done" && "text-muted-foreground",
+                    item.status === "error" && "text-destructive"
+                  )}
+                >
+                  {item.file.name}
+                </span>
+                {item.error && (
+                  <span className="text-xs text-destructive ml-auto shrink-0">
+                    {item.error}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <form onSubmit={handleSearch} className="flex gap-2">
         <input
@@ -168,12 +298,17 @@ export default function ArchiveFilesPage() {
         <Card className="p-12 text-center text-muted-foreground border-dashed">
           <FileArchive className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p>업로드된 파일이 없습니다.</p>
-          <p className="text-sm mt-1">zip, pdf, txt, md, docx, xlsx, pptx 파일을 업로드해보세요.</p>
+          <p className="text-sm mt-1">
+            zip, pdf, txt, md, docx, xlsx, pptx 파일을 여러 개 한꺼번에 업로드할 수 있습니다.
+          </p>
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {files.map((file) => (
-            <Card key={file.id} className="overflow-hidden hover:ring-1 hover:ring-primary transition-all">
+            <Card
+              key={file.id}
+              className="overflow-hidden hover:ring-1 hover:ring-primary transition-all"
+            >
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
@@ -212,11 +347,14 @@ export default function ArchiveFilesPage() {
 
                 {file.aiTags && (
                   <div className="flex flex-wrap gap-1">
-                    {file.aiTags.split(",").slice(0, 4).map((tag: string) => (
-                      <Badge key={tag} variant="secondary" className="text-[10px]">
-                        {tag.trim()}
-                      </Badge>
-                    ))}
+                    {file.aiTags
+                      .split(",")
+                      .slice(0, 4)
+                      .map((tag: string) => (
+                        <Badge key={tag} variant="secondary" className="text-[10px]">
+                          {tag.trim()}
+                        </Badge>
+                      ))}
                   </div>
                 )}
 
@@ -234,3 +372,4 @@ export default function ArchiveFilesPage() {
     </div>
   );
 }
+
