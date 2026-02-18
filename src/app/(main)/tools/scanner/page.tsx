@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -95,6 +95,20 @@ export default function ScannerHubPage() {
 
   // 콜백 로그 상태
   const [callbackLogs, setCallbackLogs] = useState<any[]>([]);
+
+  // 스크롤 리셋용 ref
+  const cheatScrollRef = useRef<HTMLDivElement>(null);
+  const guideScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const viewport = cheatScrollRef.current?.querySelector("[data-radix-scroll-area-viewport]");
+    if (viewport) (viewport as HTMLElement).scrollTop = 0;
+  }, [selectedCheat]);
+
+  useEffect(() => {
+    const viewport = guideScrollRef.current?.querySelector("[data-radix-scroll-area-viewport]");
+    if (viewport) (viewport as HTMLElement).scrollTop = 0;
+  }, [selectedGuide]);
 
   useEffect(() => {
     fetchData();
@@ -399,6 +413,7 @@ export default function ScannerHubPage() {
               </CardContent>
             </Card>
             <Card className="lg:col-span-3">
+              <div ref={cheatScrollRef}>
               <ScrollArea className="h-[600px]">
                 <CardHeader>
                   <CardTitle className="text-2xl capitalize">{selectedCheat} Cheat Sheet</CardTitle>
@@ -427,6 +442,7 @@ export default function ScannerHubPage() {
                   ))}
                 </CardContent>
               </ScrollArea>
+              </div>
             </Card>
           </div>
         </TabsContent>
@@ -445,6 +461,7 @@ export default function ScannerHubPage() {
               </CardContent>
             </Card>
             <Card className="lg:col-span-3">
+              <div ref={guideScrollRef}>
               <ScrollArea className="h-[600px]">
                 {guides[selectedGuide] ? (
                   <div className="p-6 space-y-6">
@@ -479,6 +496,7 @@ export default function ScannerHubPage() {
                   <div className="h-full flex items-center justify-center text-muted-foreground">가이드를 선택해주세요.</div>
                 )}
               </ScrollArea>
+              </div>
             </Card>
           </div>
         </TabsContent>
