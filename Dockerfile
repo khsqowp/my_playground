@@ -49,8 +49,15 @@ RUN adduser --system --uid 1001 nextjs
 # Force install maintenance tools in runner stage
 RUN npm install bcryptjs prisma@6.2.0
 
+# Install Python3 for ctf-toolkit
+RUN apk add --no-cache python3 py3-pip
+
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
+
+# Copy ctf-toolkit vendor and install Python dependencies
+COPY --from=builder /app/vendor ./vendor
+RUN pip3 install --no-cache-dir -r /app/vendor/ctf-toolkit/requirements.txt --break-system-packages
 
 # Set the correct permission for prerender cache
 RUN mkdir .next
