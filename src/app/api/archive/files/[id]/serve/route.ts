@@ -77,7 +77,9 @@ export async function GET(
 
   const webStream = new ReadableStream({
     start(controller) {
-      nodeStream.on("data", (chunk: Buffer) => controller.enqueue(chunk));
+      nodeStream.on("data", (chunk: Buffer | string) =>
+        controller.enqueue(typeof chunk === "string" ? Buffer.from(chunk) : chunk)
+      );
       nodeStream.on("end", () => {
         controller.close();
         fh.close().catch(() => {});
