@@ -29,6 +29,7 @@ import {
   Globe, 
   Lock, 
   Zap,
+  Database,
   Loader2,
   Trash2,
   Plus,
