@@ -15,9 +15,11 @@ model User {
   email         String    @unique
   password      String
   name          String
-  phone         String?   // 연락처 필드 추가
+  phone         String?   // 연락처
+  birthDate     String?   // 생년월일 (YYYY-MM-DD 형식 문자열로 저장)
   status        UserStatus @default(PENDING) // 기본값은 승인 대기
   role          Role      @default(USER)
+  permissions   Json?     // 상세 권한 { dashboard: { view: boolean, use: boolean }, ... }
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

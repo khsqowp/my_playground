@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Bike, Loader2 } from "lucide-react";
 
+import Link from "next/link";
+
 function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -23,19 +25,25 @@ function LoginForm() {
     setLoading(true);
     setError("");
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
 
-    setLoading(false);
+      setLoading(false);
 
-    if (result?.error) {
-      setError("이메일 또는 비밀번호가 올바르지 않습니다");
-    } else {
-      router.push(callbackUrl);
-      router.refresh();
+      if (result?.error) {
+        // Next-auth authorize에서 발생시킨 에러 메시지를 보여주기 위해 수정
+        setError(result.error || "이메일 또는 비밀번호가 올바르지 않습니다");
+      } else {
+        router.push(callbackUrl);
+        router.refresh();
+      }
+    } catch (err: any) {
+      setLoading(false);
+      setError("로그인 중 오류가 발생했습니다.");
     }
   }
 
@@ -48,7 +56,7 @@ function LoginForm() {
         <CardTitle className="text-2xl font-bold">88Motorcycle</CardTitle>
         <CardDescription>개인 플랫폼에 로그인하세요</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
@@ -81,6 +89,12 @@ function LoginForm() {
             로그인
           </Button>
         </form>
+        <div className="text-center text-sm text-muted-foreground mt-4">
+          계정이 없으신가요?{" "}
+          <Link href="/register" className="text-primary underline underline-offset-4 hover:text-primary/80">
+            가입 신청하기
+          </Link>
+        </div>
       </CardContent>
     </Card>
   );

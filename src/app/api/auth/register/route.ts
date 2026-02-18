@@ -4,7 +4,7 @@ import prisma from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {
-    const { name, email, phone, password } = await req.json();
+    const { name, email, phone, birthDate, password } = await req.json();
 
     if (!name || !email || !password) {
       return new NextResponse("필수 정보가 누락되었습니다.", { status: 400 });
@@ -23,14 +23,30 @@ export async function POST(req: Request) {
     const hashedPassword = await bcrypt.hash(password, 12);
 
     // 사용자 생성 (기본 상태: PENDING)
+    // 기본 권한 설정 (모두 false)
+    const defaultPermissions = {
+      dashboard: { view: false, use: false },
+      blog: { view: false, use: false },
+      portfolio: { view: false, use: false },
+      archive: { view: false, use: false },
+      data: { view: false, use: false },
+      automation: { view: false, use: false },
+      activity: { view: false, use: false },
+      persona: { view: false, use: false },
+      tools: { view: false, use: false },
+      links: { view: false, use: false },
+    };
+
     const user = await prisma.user.create({
       data: {
         name,
         email,
         phone,
+        birthDate,
         password: hashedPassword,
         status: "PENDING",
         role: "USER",
+        permissions: defaultPermissions,
       },
     });
 

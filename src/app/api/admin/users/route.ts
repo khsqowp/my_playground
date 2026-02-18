@@ -17,8 +17,11 @@ export async function GET() {
       id: true,
       name: true,
       email: true,
+      phone: true,
+      birthDate: true,
       role: true,
       status: true,
+      permissions: true,
       createdAt: true,
     }
   });
@@ -30,13 +33,14 @@ export async function PATCH(request: NextRequest) {
   if (!await isAdmin()) return new NextResponse("Unauthorized", { status: 401 });
 
   const body = await request.json();
-  const { userId, status, role } = body;
+  const { userId, status, role, permissions } = body;
 
   const user = await prisma.user.update({
     where: { id: userId },
     data: {
       ...(status && { status }),
       ...(role && { role }),
+      ...(permissions && { permissions }),
     }
   });
 
