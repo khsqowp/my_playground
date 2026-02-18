@@ -86,7 +86,12 @@ export default function ScannerHubPage() {
 
   // 인코더/디코더
   const [encodeInput, setEncodeInput] = useState("");
+  const [encodeMode, setEncodeMode] = useState<"encode" | "decode">("encode");
   const [encodeOutput, setEncodeOutput] = useState<Record<string, string>>({});
+
+  // 가이드 데이터
+  const [guides, setGuides] = useState<Record<string, any>>({});
+  const [selectedGuide, setSelectedGuide] = useState<string>("sqli");
 
   // 콜백 로그 상태
   const [callbackLogs, setCallbackLogs] = useState<any[]>([]);
@@ -103,10 +108,25 @@ export default function ScannerHubPage() {
       const res = await fetch("/api/tools/scanner/data");
       if (res.ok) {
         const data = await res.json();
-        setCheatsheets(data.cheatsheets);
+        setCheatsheets(data.cheatsheets || {});
+        setGuides(data.guides || {});
       }
     } catch (e) {
       console.error("Data fetch failed", e);
+    }
+  };
+
+  const runEncoder = async () => {
+    if (!encodeInput) return;
+    try {
+      const res = await fetch("/api/tools/scanner/encode", {
+        method: "POST",
+        body: JSON.stringify({ input: encodeInput, mode: encodeMode })
+      });
+      const data = await res.json();
+      setEncodeOutput(data);
+    } catch (e) {
+      toast.error("처리 실패");
     }
   };
 
@@ -425,26 +445,99 @@ export default function ScannerHubPage() {
           </div>
         </TabsContent>
 
-        {/* 4. 유틸리티 (인코더) */}
+        {/* 4. 학습 가이드 */}
+        <TabsContent value="guides">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <Card className="lg:col-span-1">
+              <CardHeader><CardTitle className="text-sm uppercase tracking-wider">Attack Guides</CardTitle></CardHeader>
+              <CardContent className="p-2">
+                {Object.keys(guides).map(key => (
+                  <Button key={key} variant={selectedGuide === key ? "secondary" : "ghost"} className="w-full justify-start mb-1 capitalize" onClick={() => setSelectedGuide(key)}>
+                    <BookOpen className="h-4 w-4 mr-2" /> {key}
+                  </Button>
+                ))}
+              </CardContent>
+            </Card>
+            <Card className="lg:col-span-3">
+              <ScrollArea className="h-[600px]">
+                {guides[selectedGuide] ? (
+                  <div className="p-6 space-y-6">
+                    <div>
+                      <h2 className="text-3xl font-bold mb-2">{guides[selectedGuide].title}</h2>
+                      <Badge className="bg-red-500">{guides[selectedGuide].severity.toUpperCase()}</Badge>
+                      <Badge variant="outline" className="ml-2">{guides[selectedGuide].difficulty}</Badge>
+                    </div>
+                    <Separator />
+                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                      <h3 className="text-lg font-semibold flex items-center gap-2"><Info className="h-4 w-4" /> Overview</h3>
+                      <p className="text-muted-foreground whitespace-pre-wrap">{guides[selectedGuide].overview}</p>
+                      
+                      <h3 className="text-lg font-semibold mt-6">Impact</h3>
+                      <ul className="list-disc pl-5 space-y-1">
+                        {guides[selectedGuide].impact?.map((item: string, i: number) => (
+                          <li key={i} className="text-muted-foreground">{item}</li>
+                        ))}
+                      </ul>
+
+                      <h3 className="text-lg font-semibold mt-6">CTF Tips</h3>
+                      <div className="bg-muted/50 p-4 rounded-lg border border-primary/20">
+                        {guides[selectedGuide].ctf_tips?.map((tip: string, i: number) => (
+                          <div key={i} className="flex gap-2 mb-2 text-sm">
+                            <Zap className="h-4 w-4 text-yellow-500 shrink-0" /> {tip}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-muted-foreground">가이드를 선택해주세요.</div>
+                )}
+              </ScrollArea>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* 5. 유틸리티 (인코더/디코더) */}
         <TabsContent value="utils">
           <Card>
-            <CardHeader><CardTitle>Encoder / Decoder Utility</CardTitle></CardHeader>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle>Encoder / Decoder Utility</CardTitle>
+                <div className="flex border rounded-lg overflow-hidden">
+                  <Button 
+                    variant={encodeMode === "encode" ? "secondary" : "ghost"} 
+                    className="rounded-none h-8 px-4 text-xs"
+                    onClick={() => setEncodeMode("encode")}
+                  >Encode</Button>
+                  <Button 
+                    variant={encodeMode === "decode" ? "secondary" : "ghost"} 
+                    className="rounded-none h-8 px-4 text-xs"
+                    onClick={() => setEncodeMode("decode")}
+                  >Decode</Button>
+                </div>
+              </div>
+            </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label>입력 텍스트 (Payload to Encode)</Label>
-                <Textarea placeholder="admin' OR 1=1--" rows={4} value={encodeInput} onChange={(e) => setEncodeInput(e.target.value)} />
-                <Button onClick={runEncoder}>변환 실행</Button>
+                <Label>{encodeMode === "encode" ? "입력 텍스트 (Payload to Encode)" : "인코딩된 텍스트 (Data to Decode)"}</Label>
+                <Textarea 
+                  placeholder={encodeMode === "encode" ? "admin' OR 1=1--" : "YWRtaW4nIE9SIDEnPScxLS0="} 
+                  rows={4} 
+                  value={encodeInput} 
+                  onChange={(e) => setEncodeInput(e.target.value)} 
+                />
+                <Button onClick={runEncoder} className="w-full">변환 실행 ({encodeMode.toUpperCase()})</Button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {Object.entries(encodeOutput).map(([type, val]) => (
-                  <div key={type} className="p-3 border rounded-lg space-y-1">
+                  <div key={type} className="p-3 border rounded-lg space-y-1 bg-muted/10">
                     <div className="flex justify-between items-center">
                       <span className="text-[10px] uppercase font-bold text-muted-foreground">{type}</span>
                       <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => copyToClipboard(val)}>
                         <ClipboardCheck className="h-3 w-3" />
                       </Button>
                     </div>
-                    <code className="text-xs break-all block">{val}</code>
+                    <code className="text-xs break-all block text-primary">{val}</code>
                   </div>
                 ))}
               </div>
