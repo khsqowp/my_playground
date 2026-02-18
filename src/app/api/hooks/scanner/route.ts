@@ -1,20 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
-// 외부 서버(대상)가 내 서버로 데이터를 보낼 때 기록하는 엔드포인트
-export async function ALL(req: NextRequest) {
+// 외부 서버(대상)가 내 서버로 데이터를 보낼 때 기록하는 공통 핸들러
+async function handleCallback(req: NextRequest) {
   const url = new URL(req.url);
   const searchParams = Object.fromEntries(url.searchParams.entries());
-  const headers = Object.fromEntries(req.headers.entries());
   let body = {};
   
   try {
-    body = await req.json();
+    const contentType = req.headers.get("content-type");
+    if (contentType?.includes("application/json")) {
+      body = await req.json();
+    } else {
+      body = { raw: await req.text() };
+    }
   } catch (e) {
-    body = { raw: await req.text() };
+    body = { error: "Failed to parse body" };
   }
 
-  // ActivityLog 또는 전용 테이블에 기록 (여기서는 ActivityLog 활용)
+  // ActivityLog에 기록
   await prisma.activityLog.create({
     data: {
       action: "OOB_CALLBACK",
@@ -33,6 +37,10 @@ export async function ALL(req: NextRequest) {
   return new NextResponse("OK", { status: 200 });
 }
 
-export const GET = ALL;
-export const POST = ALL;
-export const PUT = ALL;
+export async function GET(req: NextRequest) { return await handleCallback(req); }
+export async function POST(req: NextRequest) { return await handleCallback(req); }
+export async function PUT(req: NextRequest) { return await handleCallback(req); }
+export async function PATCH(req: NextRequest) { return await handleCallback(req); }
+export async function DELETE(req: NextRequest) { return await handleCallback(req); }
+export async function HEAD(req: NextRequest) { return await handleCallback(req); }
+export async function OPTIONS(req: NextRequest) { return await handleCallback(req); }
