@@ -30,7 +30,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { MoreHorizontal, UserCheck, UserX, Shield, Trash2, Clock, Settings2 } from "lucide-react";
 import { format } from "date-fns";
-import ko from "date-fns/locale/ko";
+import { ko } from "date-fns/locale";
 
 interface Permission {
   view: boolean;
