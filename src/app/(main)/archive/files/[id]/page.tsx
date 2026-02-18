@@ -181,7 +181,7 @@ export default async function ArchiveFileDetailPage({
           </CardHeader>
           <CardContent>
             <iframe
-              src={`${file.filePath}#toolbar=1&navpanes=0`}
+              src={`/api/archive/files/${file.id}/serve`}
               className="w-full rounded-md border"
               style={{ height: "70vh", minHeight: "500px" }}
               title={file.fileName}
@@ -230,7 +230,7 @@ export default async function ArchiveFileDetailPage({
       <Card>
         <CardContent className="p-4">
           <a
-            href={file.filePath}
+            href={`/api/archive/files/${file.id}/serve`}
             download={file.fileName}
             className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
           >

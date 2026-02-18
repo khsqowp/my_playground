@@ -58,10 +58,27 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id, folder } = await request.json();
-  if (!id || !folder?.trim()) {
-    return NextResponse.json({ error: "id and folder are required" }, { status: 400 });
+  const body = await request.json();
+  const folder: string = body.folder?.trim();
+  if (!folder) return NextResponse.json({ error: "folder is required" }, { status: 400 });
+
+  // 단일: { id, folder } | 다중: { ids, folder }
+  if (body.ids && Array.isArray(body.ids) && body.ids.length > 0) {
+    // 소유권 확인
+    const owned = await prisma.archiveFile.findMany({
+      where: { id: { in: body.ids }, authorId: session.user.id },
+      select: { id: true },
+    });
+    const ownedIds = owned.map((f: { id: string }) => f.id);
+    await prisma.archiveFile.updateMany({
+      where: { id: { in: ownedIds } },
+      data: { folder },
+    });
+    return NextResponse.json({ updated: ownedIds.length });
   }
+
+  const id: string = body.id;
+  if (!id) return NextResponse.json({ error: "id or ids required" }, { status: 400 });
 
   const file = await prisma.archiveFile.findFirst({
     where: { id, authorId: session.user.id },
@@ -70,7 +87,7 @@ export async function PATCH(request: NextRequest) {
 
   const updated = await prisma.archiveFile.update({
     where: { id },
-    data: { folder: folder.trim() },
+    data: { folder },
   });
   return NextResponse.json(updated);
 }

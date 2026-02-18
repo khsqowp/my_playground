@@ -6,6 +6,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   FileArchive,
   FileText,
   File,
@@ -20,6 +27,11 @@ import {
   Folder,
   ChevronRight,
   ChevronDown,
+  CheckSquare,
+  Square,
+  FolderInput,
+  Sparkles,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -64,7 +76,6 @@ interface QueueItem {
   error?: string;
 }
 
-// Build a nested tree from flat folder paths like ["개발/TypeScript", "문서/PDF", "미분류"]
 interface FolderNode {
   name: string;
   fullPath: string;
@@ -109,8 +120,7 @@ function FolderTree({
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  const toggle = (path: string) =>
-    setExpanded((prev) => ({ ...prev, [path]: !prev[path] }));
+  const toggle = (p: string) => setExpanded((prev) => ({ ...prev, [p]: !prev[p] }));
 
   return (
     <div>
@@ -128,8 +138,7 @@ function FolderTree({
               }}
               className={cn(
                 "w-full flex items-center gap-1.5 px-2 py-1 text-sm rounded-md text-left hover:bg-muted/60 transition-colors",
-                isSelected && "bg-muted font-medium text-foreground",
-                !isSelected && "text-muted-foreground"
+                isSelected ? "bg-muted font-medium text-foreground" : "text-muted-foreground"
               )}
               style={{ paddingLeft: `${8 + level * 14}px` }}
             >
@@ -179,6 +188,17 @@ export default function ArchiveFilesPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 });
 
+  // Multi-select state
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Bulk action state
+  const [showBulkMoveDialog, setShowBulkMoveDialog] = useState(false);
+  const [bulkMoveInput, setBulkMoveInput] = useState("");
+  const [isBulkMoving, setIsBulkMoving] = useState(false);
+  const [isBulkReclassifying, setIsBulkReclassifying] = useState(false);
+  const [isReclassifyingAll, setIsReclassifyingAll] = useState(false);
+
   const fetchFolders = useCallback(() => {
     fetch("/api/archive/files?folderList=1")
       .then((r) => r.json())
@@ -187,21 +207,18 @@ export default function ArchiveFilesPage() {
       });
   }, []);
 
-  const fetchFiles = useCallback(
-    (q = "", folder = "") => {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (q) params.set("search", q);
-      if (folder) params.set("folder", folder);
-      fetch(`/api/archive/files?${params}`)
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.files) setFiles(data.files);
-        })
-        .finally(() => setLoading(false));
-    },
-    []
-  );
+  const fetchFiles = useCallback((q = "", folder = "") => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (q) params.set("search", q);
+    if (folder) params.set("folder", folder);
+    fetch(`/api/archive/files?${params}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.files) setFiles(data.files);
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   useEffect(() => {
     fetchFolders();
@@ -219,6 +236,27 @@ export default function ArchiveFilesPage() {
     fetchFiles(search, selectedFolder);
   };
 
+  // ── 파일 선택 ──────────────────────────────────────────
+  const toggleFileSelect = (id: string) => {
+    setSelectMode(true);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    setSelectedIds(new Set(files.map((f) => f.id)));
+  };
+
+  const handleClearSelect = () => {
+    setSelectedIds(new Set());
+    setSelectMode(false);
+  };
+
+  // ── 업로드 ─────────────────────────────────────────────
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(e.target.files || []);
     if (selected.length === 0) return;
@@ -270,15 +308,16 @@ export default function ArchiveFilesPage() {
     for (let batchStart = 0; batchStart < items.length; batchStart += BATCH_SIZE) {
       const batch = items.slice(batchStart, batchStart + BATCH_SIZE);
       const batchIndices = batch.map((_, i) => batchStart + i);
-      const results = await Promise.all(batch.map((item, i) => uploadSingleFile(item, batchIndices[i])));
+      const results = await Promise.all(
+        batch.map((item, i) => uploadSingleFile(item, batchIndices[i]))
+      );
       doneCount += results.filter(Boolean).length;
       setUploadProgress({ done: doneCount, total: items.length });
     }
-    const failed = items.length - doneCount;
-    if (failed > 0) {
-      toast.error(`${doneCount}개 업로드 완료, ${failed}개 실패`);
+    if (items.length - doneCount > 0) {
+      toast.error(`${doneCount}개 완료, ${items.length - doneCount}개 실패`);
     } else {
-      toast.success(`${doneCount}개 파일 업로드 및 AI 분석 완료!`);
+      toast.success(`${doneCount}개 파일 업로드 완료!`);
     }
     setIsUploading(false);
     fetchFolders();
@@ -286,6 +325,7 @@ export default function ArchiveFilesPage() {
     setTimeout(() => setQueue([]), 3000);
   };
 
+  // ── 단일 삭제 ──────────────────────────────────────────
   const handleDelete = async (id: string, fileName: string) => {
     if (!confirm(`"${fileName}" 파일을 삭제하시겠습니까?`)) return;
     setDeletingId(id);
@@ -298,6 +338,7 @@ export default function ArchiveFilesPage() {
       if (!res.ok) throw new Error("삭제 실패");
       toast.success("파일이 삭제되었습니다.");
       setFiles((prev) => prev.filter((f) => f.id !== id));
+      setSelectedIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
       fetchFolders();
     } catch {
       toast.error("삭제 중 오류가 발생했습니다.");
@@ -306,8 +347,12 @@ export default function ArchiveFilesPage() {
     }
   };
 
+  // ── 단일 폴더 이동 ─────────────────────────────────────
   const handleMoveFolder = async (fileId: string, currentFolder: string) => {
-    const newFolder = window.prompt("이동할 폴더 경로를 입력하세요 (예: 개발/TypeScript):", currentFolder);
+    const newFolder = window.prompt(
+      "이동할 폴더 경로를 입력하세요 (예: 개발/TypeScript):",
+      currentFolder
+    );
     if (!newFolder || newFolder.trim() === currentFolder) return;
     setMovingId(fileId);
     try {
@@ -327,29 +372,131 @@ export default function ArchiveFilesPage() {
     }
   };
 
+  // ── 일괄 폴더 이동 ─────────────────────────────────────
+  const handleBulkMove = async () => {
+    if (!bulkMoveInput.trim()) return;
+    setIsBulkMoving(true);
+    try {
+      const res = await fetch("/api/archive/files", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds), folder: bulkMoveInput.trim() }),
+      });
+      if (!res.ok) throw new Error("이동 실패");
+      const data = await res.json();
+      toast.success(`${data.updated}개 파일을 "${bulkMoveInput.trim()}"으로 이동했습니다.`);
+      setShowBulkMoveDialog(false);
+      setBulkMoveInput("");
+      handleClearSelect();
+      fetchFolders();
+      fetchFiles(search, selectedFolder);
+    } catch {
+      toast.error("폴더 이동 중 오류가 발생했습니다.");
+    } finally {
+      setIsBulkMoving(false);
+    }
+  };
+
+  // ── 선택 파일 재분류 ───────────────────────────────────
+  const handleBulkReclassify = async () => {
+    if (selectedIds.size === 0) return;
+    setIsBulkReclassifying(true);
+    try {
+      const res = await fetch("/api/archive/files/reclassify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "실패");
+      toast.success(
+        `${data.queued}개 파일 재분류를 시작했습니다. 완료 후 새로고침하세요.`,
+        { duration: 5000 }
+      );
+      handleClearSelect();
+    } catch {
+      toast.error("재분류 중 오류가 발생했습니다.");
+    } finally {
+      setIsBulkReclassifying(false);
+    }
+  };
+
+  // ── 미분류 전체 자동 정리 ──────────────────────────────
+  const handleReclassifyAll = async () => {
+    const unclassifiedCount = files.filter((f) => f.folder === "미분류").length;
+    if (unclassifiedCount === 0 && selectedFolder !== "미분류") {
+      // 전체 미분류 개수 확인 필요
+    }
+    if (
+      !confirm(
+        `"미분류" 폴더의 파일들을 AI로 자동 분류합니다. 백그라운드에서 처리되므로 시간이 걸릴 수 있습니다. 계속하시겠습니까?`
+      )
+    )
+      return;
+
+    setIsReclassifyingAll(true);
+    try {
+      const res = await fetch("/api/archive/files/reclassify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unclassifiedOnly: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "실패");
+      if (data.queued === 0) {
+        toast.info("미분류 파일이 없습니다.");
+      } else {
+        toast.success(
+          `${data.queued}개 미분류 파일 자동 정리를 시작했습니다. 완료 후 새로고침하세요.`,
+          { duration: 6000 }
+        );
+      }
+    } catch {
+      toast.error("자동 정리 중 오류가 발생했습니다.");
+    } finally {
+      setIsReclassifyingAll(false);
+    }
+  };
+
   const folderTree = buildFolderTree(folders);
 
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <FileArchive className="h-6 w-6 text-primary" />
           파일 아카이브
         </h1>
-        <Button onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
-          {isUploading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              {uploadProgress.done}/{uploadProgress.total} 처리 중...
-            </>
-          ) : (
-            <>
-              <Upload className="mr-2 h-4 w-4" />
-              파일 업로드
-            </>
-          )}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleReclassifyAll}
+            disabled={isReclassifyingAll}
+            title="미분류 파일을 AI로 자동 정리"
+          >
+            {isReclassifyingAll ? (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="mr-2 h-3.5 w-3.5" />
+            )}
+            미분류 자동 정리
+          </Button>
+          <Button onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+            {isUploading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {uploadProgress.done}/{uploadProgress.total} 처리 중...
+              </>
+            ) : (
+              <>
+                <Upload className="mr-2 h-4 w-4" />
+                파일 업로드
+              </>
+            )}
+          </Button>
+        </div>
         <input
           ref={fileInputRef}
           type="file"
@@ -369,10 +516,18 @@ export default function ArchiveFilesPage() {
           <div className="space-y-1.5 max-h-48 overflow-y-auto">
             {queue.map((item, i) => (
               <div key={i} className="flex items-center gap-2 text-sm">
-                {item.status === "waiting" && <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
-                {item.status === "uploading" && <Loader2 className="h-3.5 w-3.5 text-primary animate-spin shrink-0" />}
-                {item.status === "done" && <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />}
-                {item.status === "error" && <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />}
+                {item.status === "waiting" && (
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                )}
+                {item.status === "uploading" && (
+                  <Loader2 className="h-3.5 w-3.5 text-primary animate-spin shrink-0" />
+                )}
+                {item.status === "done" && (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                )}
+                {item.status === "error" && (
+                  <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />
+                )}
                 <span
                   className={cn(
                     "truncate",
@@ -383,7 +538,9 @@ export default function ArchiveFilesPage() {
                   {item.file.name}
                 </span>
                 {item.error && (
-                  <span className="text-xs text-destructive ml-auto shrink-0">{item.error}</span>
+                  <span className="text-xs text-destructive ml-auto shrink-0 max-w-40 truncate">
+                    {item.error}
+                  </span>
                 )}
               </div>
             ))}
@@ -391,16 +548,21 @@ export default function ArchiveFilesPage() {
         </Card>
       )}
 
-      {/* Main layout: sidebar + content */}
+      {/* Main layout */}
       <div className="flex gap-4">
         {/* Folder sidebar */}
         <aside className="w-52 shrink-0">
           <Card className="p-2">
             <button
-              onClick={() => { setSelectedFolder(""); fetchFiles(search, ""); }}
+              onClick={() => {
+                setSelectedFolder("");
+                fetchFiles(search, "");
+              }}
               className={cn(
                 "w-full flex items-center gap-1.5 px-2 py-1.5 text-sm rounded-md text-left hover:bg-muted/60 transition-colors mb-1",
-                selectedFolder === "" ? "bg-muted font-medium text-foreground" : "text-muted-foreground"
+                selectedFolder === ""
+                  ? "bg-muted font-medium text-foreground"
+                  : "text-muted-foreground"
               )}
             >
               <FolderOpen className="h-3.5 w-3.5 shrink-0 text-primary" />
@@ -415,27 +577,60 @@ export default function ArchiveFilesPage() {
           </Card>
         </aside>
 
-        {/* File list */}
-        <div className="flex-1 min-w-0 space-y-4">
-          {/* Search */}
-          <form onSubmit={handleSearch} className="flex gap-2">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="파일명, AI 요약, 태그 검색..."
-              className="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-            <Button type="submit" variant="outline">
-              <Search className="h-4 w-4" />
+        {/* File area */}
+        <div className="flex-1 min-w-0 space-y-3">
+          {/* Search + select toolbar */}
+          <div className="flex gap-2 items-center">
+            <form onSubmit={handleSearch} className="flex gap-2 flex-1">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="파일명, AI 요약, 태그 검색..."
+                className="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <Button type="submit" variant="outline" size="sm">
+                <Search className="h-4 w-4" />
+              </Button>
+            </form>
+            <Button
+              variant={selectMode ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                if (selectMode) handleClearSelect();
+                else setSelectMode(true);
+              }}
+            >
+              <CheckSquare className="mr-1.5 h-3.5 w-3.5" />
+              {selectMode ? "선택 해제" : "선택 모드"}
             </Button>
-          </form>
+          </div>
 
           {selectedFolder && (
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <Folder className="h-3 w-3" />
               {selectedFolder}
             </p>
+          )}
+
+          {/* Select all row */}
+          {selectMode && files.length > 0 && (
+            <div className="flex items-center gap-3 text-sm text-muted-foreground px-1">
+              <button
+                onClick={selectedIds.size === files.length ? handleClearSelect : handleSelectAll}
+                className="flex items-center gap-1.5 hover:text-foreground transition-colors"
+              >
+                {selectedIds.size === files.length ? (
+                  <CheckSquare className="h-4 w-4 text-primary" />
+                ) : (
+                  <Square className="h-4 w-4" />
+                )}
+                전체 선택
+              </button>
+              {selectedIds.size > 0 && (
+                <span className="text-primary font-medium">{selectedIds.size}개 선택됨</span>
+              )}
+            </div>
           )}
 
           {loading ? (
@@ -454,94 +649,211 @@ export default function ArchiveFilesPage() {
               </p>
               {!selectedFolder && (
                 <p className="text-sm mt-1">
-                  zip, pdf, txt, md, docx, xlsx, pptx 파일을 여러 개 한꺼번에 업로드할 수 있습니다.
+                  zip, pdf, txt, md, docx, xlsx, pptx 파일을 업로드할 수 있습니다.
                 </p>
               )}
             </Card>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {files.map((file) => (
-                <Card
-                  key={file.id}
-                  className="overflow-hidden hover:ring-1 hover:ring-primary transition-all"
-                >
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <FileIcon ext={file.extension} />
-                        <span className="font-medium text-sm truncate">{file.fileName}</span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleDelete(file.id, file.fileName);
-                        }}
-                        disabled={deletingId === file.id}
-                      >
-                        {deletingId === file.id ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-3 w-3" />
+              {files.map((file) => {
+                const isSelected = selectedIds.has(file.id);
+                return (
+                  <Card
+                    key={file.id}
+                    className={cn(
+                      "overflow-hidden transition-all cursor-default",
+                      selectMode && "hover:ring-1 hover:ring-primary/50",
+                      isSelected
+                        ? "ring-2 ring-primary bg-primary/5"
+                        : "hover:ring-1 hover:ring-primary"
+                    )}
+                    onClick={() => selectMode && toggleFileSelect(file.id)}
+                  >
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        {/* Checkbox (select mode) */}
+                        {selectMode && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleFileSelect(file.id);
+                            }}
+                            className="shrink-0 mt-0.5"
+                          >
+                            {isSelected ? (
+                              <CheckSquare className="h-4 w-4 text-primary" />
+                            ) : (
+                              <Square className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </button>
                         )}
-                      </Button>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{formatBytes(file.fileSize)}</span>
-                      <span>•</span>
-                      <span>{format(new Date(file.createdAt), "yyyy-MM-dd", { locale: ko })}</span>
-                    </div>
-
-                    {/* Folder badge + move button */}
-                    <button
-                      onClick={() => handleMoveFolder(file.id, file.folder)}
-                      disabled={movingId === file.id}
-                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      title="클릭하여 폴더 이동"
-                    >
-                      {movingId === file.id ? (
-                        <Loader2 className="h-3 w-3 animate-spin shrink-0" />
-                      ) : (
-                        <Folder className="h-3 w-3 shrink-0" />
-                      )}
-                      <span className="truncate">{file.folder}</span>
-                    </button>
-
-                    <AiStatusBadge status={file.aiStatus} />
-
-                    {file.aiSummary && (
-                      <p className="text-xs text-muted-foreground line-clamp-2">{file.aiSummary}</p>
-                    )}
-
-                    {file.aiTags && (
-                      <div className="flex flex-wrap gap-1">
-                        {file.aiTags
-                          .split(",")
-                          .slice(0, 4)
-                          .map((tag: string) => (
-                            <Badge key={tag} variant="secondary" className="text-[10px]">
-                              {tag.trim()}
-                            </Badge>
-                          ))}
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <FileIcon ext={file.extension} />
+                          <span className="font-medium text-sm truncate">{file.fileName}</span>
+                        </div>
+                        {!selectMode && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleDelete(file.id, file.fileName);
+                            }}
+                            disabled={deletingId === file.id}
+                          >
+                            {deletingId === file.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3 w-3" />
+                            )}
+                          </Button>
+                        )}
                       </div>
-                    )}
 
-                    <Link
-                      href={`/archive/files/${file.id}`}
-                      className="block text-xs text-primary hover:underline"
-                    >
-                      상세 보기 →
-                    </Link>
-                  </CardContent>
-                </Card>
-              ))}
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{formatBytes(file.fileSize)}</span>
+                        <span>•</span>
+                        <span>
+                          {format(new Date(file.createdAt), "yyyy-MM-dd", { locale: ko })}
+                        </span>
+                      </div>
+
+                      {/* Folder badge */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!selectMode) handleMoveFolder(file.id, file.folder);
+                        }}
+                        disabled={movingId === file.id || selectMode}
+                        className={cn(
+                          "flex items-center gap-1 text-xs text-muted-foreground transition-colors",
+                          !selectMode && "hover:text-foreground"
+                        )}
+                        title={selectMode ? file.folder : "클릭하여 폴더 이동"}
+                      >
+                        {movingId === file.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+                        ) : (
+                          <Folder className="h-3 w-3 shrink-0" />
+                        )}
+                        <span className="truncate">{file.folder}</span>
+                      </button>
+
+                      <AiStatusBadge status={file.aiStatus} />
+
+                      {file.aiSummary && (
+                        <p className="text-xs text-muted-foreground line-clamp-2">
+                          {file.aiSummary}
+                        </p>
+                      )}
+
+                      {file.aiTags && (
+                        <div className="flex flex-wrap gap-1">
+                          {file.aiTags
+                            .split(",")
+                            .slice(0, 4)
+                            .map((tag: string) => (
+                              <Badge key={tag} variant="secondary" className="text-[10px]">
+                                {tag.trim()}
+                              </Badge>
+                            ))}
+                        </div>
+                      )}
+
+                      {!selectMode && (
+                        <Link
+                          href={`/archive/files/${file.id}`}
+                          className="block text-xs text-primary hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          상세 보기 →
+                        </Link>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </div>
       </div>
+
+      {/* Floating bulk action bar */}
+      {selectMode && selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <div className="flex items-center gap-2 bg-background border rounded-full shadow-lg px-4 py-2">
+            <span className="text-sm font-medium text-primary">{selectedIds.size}개 선택</span>
+            <div className="w-px h-4 bg-border" />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setBulkMoveInput("");
+                setShowBulkMoveDialog(true);
+              }}
+            >
+              <FolderInput className="mr-1.5 h-3.5 w-3.5" />
+              폴더 이동
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleBulkReclassify}
+              disabled={isBulkReclassifying}
+            >
+              {isBulkReclassifying ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              재분류
+            </Button>
+            <Button size="sm" variant="ghost" onClick={handleClearSelect}>
+              취소
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk move dialog */}
+      <Dialog open={showBulkMoveDialog} onOpenChange={setShowBulkMoveDialog}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedIds.size}개 파일 폴더 이동
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <label className="text-sm font-medium">이동할 폴더 경로</label>
+            <input
+              type="text"
+              value={bulkMoveInput}
+              onChange={(e) => setBulkMoveInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleBulkMove()}
+              placeholder="예: 개발/TypeScript"
+              autoFocus
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <p className="text-xs text-muted-foreground">
+              슬래시(/)로 하위 폴더를 구분합니다.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setShowBulkMoveDialog(false)}
+              disabled={isBulkMoving}
+            >
+              취소
+            </Button>
+            <Button onClick={handleBulkMove} disabled={isBulkMoving || !bulkMoveInput.trim()}>
+              {isBulkMoving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              이동
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
