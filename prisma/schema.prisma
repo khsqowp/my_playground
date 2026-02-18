@@ -492,6 +492,7 @@ model ArchiveFile {
   fileType    String
   fileSize    Int
   extension   String
+  folder      String            @default("미분류")
 
   aiSummary   String?  @db.Text
   aiTags      String?
@@ -505,6 +506,7 @@ model ArchiveFile {
   updatedAt   DateTime @updatedAt
 
   @@index([authorId])
+  @@index([authorId, folder])
 }
 
 // ==================== 코드 리뷰 자동화 ====================
@@ -520,9 +522,22 @@ model CodeReviewConfig {
 
   userId  String
   user    User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewLogs CodeReviewLog[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
   @@index([incomingWebhookId])
+}
+
+model CodeReviewLog {
+  id            String   @id @default(cuid())
+  configId      String
+  config        CodeReviewConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  webhookLogId  String
+  commitSha     String?
+  createdAt     DateTime @default(now())
+
+  @@unique([configId, webhookLogId])
+  @@index([configId])
 }

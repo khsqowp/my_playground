@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { performCodeReview } from "@/lib/code-review";
+import { performCodeReview, isPushPayload } from "@/lib/code-review";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -15,24 +15,51 @@ export async function POST(request: NextRequest) {
   });
   if (!config) return NextResponse.json({ error: "Config not found" }, { status: 404 });
 
-  // Get the latest webhook log for this incoming webhook
-  const latestLog = await prisma.webhookLog.findFirst({
+  // ── 해당 인입 웹훅의 전체 로그 조회 (오래된 순) ─────────────
+  const allLogs = await prisma.webhookLog.findMany({
     where: { incomingWebhookId: config.incomingWebhookId },
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: "asc" },
   });
 
-  if (!latestLog) {
-    return NextResponse.json({ error: "수신된 웹훅 로그가 없습니다." }, { status: 404 });
+  // push 이벤트만 필터
+  const pushLogs = allLogs.filter((l) => isPushPayload(l.payload));
+
+  if (pushLogs.length === 0) {
+    return NextResponse.json({ error: "수신된 push 이벤트가 없습니다." }, { status: 404 });
   }
 
-  try {
-    await performCodeReview(latestLog.payload as any, config);
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
-    console.error("[CODE_REVIEW_TRIGGER_ERROR]", error);
-    return NextResponse.json(
-      { error: error.message || "코드 리뷰 실행 중 오류" },
-      { status: 500 }
-    );
+  // ── 이미 검토된 webhookLogId 세트 조회 ─────────────────────
+  const reviewed = await prisma.codeReviewLog.findMany({
+    where: { configId: config.id },
+    select: { webhookLogId: true },
+  });
+  const reviewedIds = new Set(reviewed.map((r: { webhookLogId: string }) => r.webhookLogId));
+
+  // ── 미검토 로그 필터 ────────────────────────────────────────
+  const pending = pushLogs.filter((l) => !reviewedIds.has(l.id));
+
+  if (pending.length === 0) {
+    return NextResponse.json({ queued: 0, message: "새로운 커밋이 없습니다." });
   }
+
+  // ── 백그라운드에서 순차 처리 (Gemini rate limit 고려) ────────
+  ;(async () => {
+    for (const log of pending) {
+      try {
+        await performCodeReview(log.payload as any, config, log.id);
+        // Gemini 과부하 방지 딜레이
+        await new Promise((r) => setTimeout(r, 1500));
+      } catch (e: any) {
+        console.error(`[CODE_REVIEW_BATCH] logId=${log.id}`, e.message);
+      }
+    }
+    console.log(`[CODE_REVIEW_BATCH] done: ${pending.length}건 처리 완료`);
+  })().catch((e) => console.error("[CODE_REVIEW_BATCH_ERROR]", e));
+
+  return NextResponse.json({
+    queued: pending.length,
+    total: pushLogs.length,
+    alreadyReviewed: reviewedIds.size,
+    message: `${pending.length}개 커밋 리뷰를 백그라운드에서 처리합니다.`,
+  });
 }
