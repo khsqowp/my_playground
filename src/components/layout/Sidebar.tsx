@@ -18,6 +18,8 @@ import {
   Users,
   Activity,
   ShieldAlert,
+  FileArchive,
+  GitPullRequest,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -53,6 +55,11 @@ const navItems = [
     icon: BookOpen,
   },
   {
+    title: "파일 아카이브",
+    href: "/archive/files",
+    icon: FileArchive,
+  },
+  {
     title: "데이터",
     href: "/data",
     icon: Database,
@@ -71,6 +78,11 @@ const navItems = [
     title: "활동 로그",
     href: "/automation/logs",
     icon: Activity,
+  },
+  {
+    title: "코드 리뷰",
+    href: "/automation/code-review",
+    icon: GitPullRequest,
   },
   {
     title: "페르소나 AI",

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { isServiceRequest, getServiceAuthorId } from "@/lib/service-auth";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -39,9 +40,20 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let authorId: string;
+
+  if (isServiceRequest(request)) {
+    const serviceAuthorId = await getServiceAuthorId();
+    if (!serviceAuthorId) {
+      return NextResponse.json({ error: "No owner user found" }, { status: 500 });
+    }
+    authorId = serviceAuthorId;
+  } else {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    authorId = session.user.id;
   }
 
   const body = await request.json();
@@ -66,7 +78,7 @@ export async function POST(request: NextRequest) {
       content,
       visibility: visibility || "PRIVATE",
       categoryId: categoryId || null,
-      authorId: session.user.id,
+      authorId,
       tags: { create: tagConnections.map((t) => ({ tagId: t.tagId })) },
     },
     include: {

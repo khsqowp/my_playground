@@ -30,6 +30,8 @@ jobs:
             "ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}",
             "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}",
             "ADMIN_NAME=${{ secrets.ADMIN_NAME }}",
+            "SERVICE_API_KEY=${{ secrets.SERVICE_API_KEY }}",
+            "DISCORD_BOT_TOKEN=${{ secrets.DISCORD_BOT_TOKEN }}",
             "UPLOAD_MAX_SIZE_MB=100",
             "UPLOAD_DIR=./public/uploads"
           )

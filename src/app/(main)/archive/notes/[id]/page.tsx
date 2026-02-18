@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import prisma from "@/lib/prisma";
 import { MarkdownRenderer } from "@/components/shared/MarkdownRenderer";
+import { MakeQuizButton } from "@/components/archive/MakeQuizButton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -33,11 +34,18 @@ export default async function NoteDetailPage({
         <Button variant="ghost" size="sm" asChild>
           <Link href="/archive/notes"><ArrowLeft className="mr-2 h-4 w-4" />뒤로</Link>
         </Button>
-        <Button variant="ghost" size="sm" asChild>
-          <Link href={`/archive/notes/write?edit=${note.id}`}>
-            <Edit className="mr-1 h-3 w-3" />수정
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <MakeQuizButton
+            noteId={note.id}
+            title={note.title}
+            content={note.content.substring(0, 2000)}
+          />
+          <Button variant="ghost" size="sm" asChild>
+            <Link href={`/archive/notes/write?edit=${note.id}`}>
+              <Edit className="mr-1 h-3 w-3" />수정
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-3">

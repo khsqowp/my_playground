@@ -1,12 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { chatWithPersona } from "@/lib/ai";
+import { isServiceRequest } from "@/lib/service-auth";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const session = await auth();
-    if (!session) {
-      return new NextResponse("Unauthorized", { status: 401 });
+    // Service-key auth (Discord bot) bypasses session auth
+    if (!isServiceRequest(req)) {
+      const session = await auth();
+      if (!session) {
+        return new NextResponse("Unauthorized", { status: 401 });
+      }
     }
 
     const { message } = await req.json();
@@ -15,7 +19,7 @@ export async function POST(req: Request) {
     }
 
     const response = await chatWithPersona(message);
-    
+
     return NextResponse.json({ response });
   } catch (error: any) {
     console.error("[PERSONA_CHAT_ERROR]", error);

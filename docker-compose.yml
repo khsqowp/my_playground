@@ -20,6 +20,7 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - ADMIN_NAME=${ADMIN_NAME}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SERVICE_API_KEY=${SERVICE_API_KEY}
     depends_on:
       - db
     networks:
@@ -68,8 +69,12 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/88motorcycle
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - APP_INTERNAL_URL=http://app:3000
+      - SERVICE_API_KEY=${SERVICE_API_KEY}
     depends_on:
       - db
+      - app
     volumes:
       - ./data/archive:/app/data
     networks:

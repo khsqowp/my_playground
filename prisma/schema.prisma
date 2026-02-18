@@ -35,6 +35,8 @@ model User {
   aiPrompts     AiPrompt[]
   shareLinks    ShareLink[]
   portfolios    Portfolio[]
+  archiveFiles  ArchiveFile[]
+  codeReviewConfigs CodeReviewConfig[]
 }
 
 enum UserStatus {
@@ -278,7 +280,7 @@ model IncomingWebhook {
   name      String
   slug      String   @unique
   enabled   Boolean  @default(true)
-  
+
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -286,7 +288,8 @@ model IncomingWebhook {
   project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   logs      WebhookLog[]
-  
+  codeReviewConfigs CodeReviewConfig[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -469,4 +472,57 @@ model ProjectSetting {
   project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, key])
+}
+
+// ==================== 파일 아카이브 ====================
+
+enum AiAnalysisStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+  SKIPPED
+}
+
+model ArchiveFile {
+  id          String            @id @default(cuid())
+  fileName    String
+  storageName String
+  filePath    String
+  fileType    String
+  fileSize    Int
+  extension   String
+
+  aiSummary   String?  @db.Text
+  aiTags      String?
+  aiStatus    AiAnalysisStatus  @default(PENDING)
+
+  zipTree     Json?
+
+  authorId    String
+  author      User   @relation(fields: [authorId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([authorId])
+}
+
+// ==================== 코드 리뷰 자동화 ====================
+
+model CodeReviewConfig {
+  id                String   @id @default(cuid())
+  name              String
+  incomingWebhookId String
+  incomingWebhook   IncomingWebhook @relation(fields: [incomingWebhookId], references: [id], onDelete: Cascade)
+  discordWebhookUrl String
+  enabled           Boolean  @default(true)
+  lastReviewAt      DateTime?
+
+  userId  String
+  user    User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([incomingWebhookId])
 }

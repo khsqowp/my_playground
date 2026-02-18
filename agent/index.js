@@ -31,7 +31,7 @@ async function autoTagPosts(client, model) {
     try {
         // 태그가 0개인 글을 최신순으로 3개 가져옴
         const res = await client.query(`
-            SELECT p.id, p.title, p.content 
+            SELECT p.id, p.title, p.content
             FROM "Post" p
             LEFT JOIN "TagOnPost" tp ON p.id = tp."postId"
             WHERE p.published = true
@@ -77,7 +77,7 @@ async function syncProjectData(client) {
             settingsRes.rows.forEach(r => settings[r.key] = r.value);
 
             const githubRepo = settings[`${project.name}_GITHUB_REPO`];
-            
+
             // GitHub 상세 수집 (수정된 파일 목록 포함)
             if (githubRepo) {
                 const commitsRes = await fetch(`https://api.github.com/repos/${githubRepo}/commits?per_page=5`);
@@ -94,16 +94,13 @@ async function syncProjectData(client) {
                         }
 
                         await client.query(
-                            `INSERT INTO "ProjectActivityLog" (id, platform, action, content, "externalId", "eventTime", "projectId", "createdAt", "rawPayload") 
+                            `INSERT INTO "ProjectActivityLog" (id, platform, action, content, "externalId", "eventTime", "projectId", "createdAt", "rawPayload")
                              VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8) ON CONFLICT DO NOTHING`,
                             ['log_' + Date.now(), 'GITHUB', 'COMMIT', `[Auto] ${c.commit.message}${fileInfo}`, c.sha, new Date(c.commit.author.date), project.id, c]
                         );
                     }
                 }
             }
-            // Notion 수집 로직은 API 엔드포인트 방식과 동일하게 복잡하므로, 
-            // 여기서는 서버의 /api/automation/meetings/sync 를 내부적으로 호출하거나 
-            // 공통 라이브러리화를 고려해야 하지만, 일단 기본 로그만 남깁니다.
             log(`✅ Sync check done for ${project.name}`);
         }
     } catch (err) { log(`❌ Sync Error: ${err.message}`); }
@@ -122,7 +119,7 @@ async function sendMidnightReport(client) {
             const webhookUrl = webhookRes.rows[0].value;
 
             const logsRes = await client.query(
-                `SELECT platform, action, content, "eventTime" FROM "ProjectActivityLog" 
+                `SELECT platform, action, content, "eventTime" FROM "ProjectActivityLog"
                  WHERE "projectId" = $1 AND "createdAt" >= NOW() - INTERVAL '24 hours' ORDER BY "eventTime" ASC`,
                 [project.id]
             );
@@ -139,13 +136,137 @@ async function sendMidnightReport(client) {
             await fetch(webhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     content: `🌙 **자정 원본 활동 기록 (${dateStr})**\n기록 건수: ${logsRes.rows.length}건\nAI 요약 없는 원본 로그입니다.`,
                     files: [] // FormData 방식이 복잡하여 일단 텍스트로 시도
                 })
             });
         }
     } catch (err) { log(`❌ Midnight Report Error: ${err.message}`); }
+}
+
+// -------------------------------------------------------------------------
+// 4. Discord 봇 (!ask / !quiz / !note)
+// -------------------------------------------------------------------------
+async function startDiscordBot(model) {
+    const token = process.env.DISCORD_BOT_TOKEN;
+    if (!token) {
+        log("DISCORD_BOT_TOKEN not set, skipping Discord bot.");
+        return;
+    }
+
+    const appUrl = process.env.APP_INTERNAL_URL || 'http://app:3000';
+    const serviceKey = process.env.SERVICE_API_KEY || '';
+
+    const { Client: DiscordClient, GatewayIntentBits } = require('discord.js');
+    const bot = new DiscordClient({
+        intents: [
+            GatewayIntentBits.Guilds,
+            GatewayIntentBits.GuildMessages,
+            GatewayIntentBits.MessageContent,
+        ]
+    });
+
+    bot.once('ready', () => {
+        log(`Discord bot logged in as ${bot.user.tag}`);
+    });
+
+    bot.on('messageCreate', async (message) => {
+        if (message.author.bot) return;
+        const content = message.content.trim();
+        if (!content.startsWith('!')) return;
+
+        const parts = content.split(' ');
+        const command = parts[0].toLowerCase();
+        const args = parts.slice(1).join(' ');
+
+        try {
+            if (command === '!ask') {
+                if (!args) {
+                    await message.reply('사용법: `!ask <질문>`');
+                    return;
+                }
+                const res = await fetch(`${appUrl}/api/persona/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-service-key': serviceKey
+                    },
+                    body: JSON.stringify({ message: args })
+                });
+                if (!res.ok) throw new Error(`API error: ${res.status}`);
+                const data = await res.json();
+                await message.reply(data.response.substring(0, 1900));
+
+            } else if (command === '!quiz') {
+                if (!args) {
+                    await message.reply('사용법: `!quiz <주제> [문제수]` (예: `!quiz TypeScript 5`)');
+                    return;
+                }
+
+                // Parse topic and optional count
+                const argParts = args.split(' ');
+                let topic = args;
+                let count = 5;
+                const lastPart = argParts[argParts.length - 1];
+                if (/^\d+$/.test(lastPart)) {
+                    count = Math.min(20, Math.max(1, parseInt(lastPart)));
+                    topic = argParts.slice(0, -1).join(' ');
+                }
+
+                await message.reply(`⏳ "${topic}" 주제로 ${count}개 퀴즈를 생성 중입니다...`);
+
+                const res = await fetch(`${appUrl}/api/archive/quiz/generate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-service-key': serviceKey
+                    },
+                    body: JSON.stringify({ topic, count })
+                });
+                if (!res.ok) throw new Error(`API error: ${res.status}`);
+                const quizSet = await res.json();
+
+                let reply = `📝 **${quizSet.title}** (${quizSet._count?.questions || quizSet.questions?.length || count}문제)\n\n`;
+                const questions = quizSet.questions || [];
+                questions.forEach((q, i) => {
+                    reply += `**Q${i + 1}.** ${q.question}\n`;
+                    if (q.hint) reply += `💡 힌트: ${q.hint}\n`;
+                    reply += `||✅ ${q.answer}||\n\n`;
+                });
+
+                await message.reply(reply.substring(0, 1900));
+
+            } else if (command === '!note') {
+                if (!args) {
+                    await message.reply('사용법: `!note <내용>`');
+                    return;
+                }
+                const res = await fetch(`${appUrl}/api/archive/notes`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-service-key': serviceKey
+                    },
+                    body: JSON.stringify({
+                        title: `[Discord] ${args.substring(0, 50)}`,
+                        content: args,
+                        visibility: 'PRIVATE'
+                    })
+                });
+                if (!res.ok) throw new Error(`API error: ${res.status}`);
+                await message.reply(`✅ 노트가 저장되었습니다: "${args.substring(0, 50)}..."`);
+            }
+        } catch (err) {
+            log(`❌ Discord bot error: ${err.message}`);
+            await message.reply(`오류가 발생했습니다: ${err.message.substring(0, 200)}`);
+        }
+    });
+
+    bot.on('error', (err) => log(`Discord bot error: ${err.message}`));
+
+    await bot.login(token);
+    log("Discord bot started.");
 }
 
 // -------------------------------------------------------------------------
@@ -165,14 +286,17 @@ async function main() {
 
     // 30분마다 데이터 수집
     cron.schedule('*/30 * * * *', () => syncProjectData(client));
-    
+
     // 새벽 4시 자동 태깅
     cron.schedule('0 4 * * *', () => model && autoTagPosts(client, model));
-    
+
     // 자정 정기 보고 (원본)
     cron.schedule('0 0 * * *', () => sendMidnightReport(client));
 
-    log("OpenClaw is standby. Tasks: 30m Sync, 4am Tagging, 0am Report.");
+    // Discord 봇 시작
+    await startDiscordBot(model);
+
+    log("OpenClaw is standby. Tasks: 30m Sync, 4am Tagging, 0am Report, Discord Bot.");
 }
 
 main().catch(err => console.error(err));

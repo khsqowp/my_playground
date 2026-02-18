@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import crypto from "crypto";
+import { performCodeReview } from "@/lib/code-review";
 
 export async function POST(
     request: NextRequest,
@@ -107,6 +108,19 @@ export async function POST(
                 eventTime: new Date(),
             }
         });
+    }
+
+    // 코드 리뷰 자동화 (fire-and-forget)
+    const githubEvent = request.headers.get("x-github-event");
+    if (githubEvent && githubEvent !== "ping") {
+        const reviewConfig = await prisma.codeReviewConfig.findFirst({
+            where: { incomingWebhookId: webhook.id, enabled: true }
+        });
+        if (reviewConfig) {
+            performCodeReview(payload, reviewConfig).catch(e =>
+                console.error("[CODE_REVIEW]", e.message)
+            );
+        }
     }
 
     return NextResponse.json({ success: true, logId: log.id });
