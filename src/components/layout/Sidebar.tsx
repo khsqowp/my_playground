@@ -82,6 +82,11 @@ const navItems = [
     icon: Wrench,
   },
   {
+    title: "스캐너",
+    href: "/tools/scanner",
+    icon: ShieldAlert,
+  },
+  {
     title: "링크",
     href: "/links",
     icon: Link2,

