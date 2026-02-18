@@ -97,14 +97,32 @@ export default function ScannerHubPage() {
   const [callbackLogs, setCallbackLogs] = useState<any[]>([]);
 
   // 스크롤 리셋용 ref
+  const pageRef = useRef<HTMLDivElement>(null);
   const cheatScrollRef = useRef<HTMLDivElement>(null);
   const guideScrollRef = useRef<HTMLDivElement>(null);
+  const logTerminalRef = useRef<HTMLDivElement>(null);
+  const logResultsRef = useRef<HTMLDivElement>(null);
 
+  // 탭 전환 시 외부 메인 스크롤 컨테이너 리셋
+  useEffect(() => {
+    let el = pageRef.current?.parentElement;
+    while (el) {
+      const { overflowY } = window.getComputedStyle(el);
+      if (overflowY === "auto" || overflowY === "scroll") {
+        el.scrollTop = 0;
+        break;
+      }
+      el = el.parentElement;
+    }
+  }, [activeTab]);
+
+  // 치트시트 항목 전환 시 내부 스크롤 리셋
   useEffect(() => {
     const viewport = cheatScrollRef.current?.querySelector("[data-radix-scroll-area-viewport]");
     if (viewport) (viewport as HTMLElement).scrollTop = 0;
   }, [selectedCheat]);
 
+  // 가이드 항목 전환 시 내부 스크롤 리셋
   useEffect(() => {
     const viewport = guideScrollRef.current?.querySelector("[data-radix-scroll-area-viewport]");
     if (viewport) (viewport as HTMLElement).scrollTop = 0;
@@ -167,6 +185,8 @@ export default function ScannerHubPage() {
     setActiveTab("logs");
     setLogs(["스캔을 시작합니다...", `Target: ${target.url}`, `Mode: ${mode.toUpperCase()}`]);
     setResults([]);
+    if (logTerminalRef.current) logTerminalRef.current.scrollTop = 0;
+    if (logResultsRef.current) logResultsRef.current.scrollTop = 0;
 
     try {
       const res = await fetch("/api/tools/scanner", {
@@ -200,7 +220,7 @@ export default function ScannerHubPage() {
   };
 
   return (
-    <div className="space-y-6 pb-10">
+    <div ref={pageRef} className="space-y-6 pb-10">
       {/* Header */}
       <div className="flex justify-between items-end">
         <div>
@@ -558,7 +578,7 @@ export default function ScannerHubPage() {
                   <Terminal className="h-4 w-4" /> Live Terminal
                 </CardTitle>
               </CardHeader>
-              <CardContent className="flex-1 overflow-auto p-4 font-mono text-[11px] text-green-500 space-y-1">
+              <CardContent ref={logTerminalRef} className="flex-1 overflow-auto p-4 font-mono text-[11px] text-green-500 space-y-1">
                 {logs.map((log, i) => (
                   <div key={i}><span className="text-slate-600 mr-2">$</span>{log}</div>
                 ))}
@@ -568,7 +588,7 @@ export default function ScannerHubPage() {
 
             <Card className="lg:col-span-2 h-[600px] flex flex-col">
               <CardHeader><CardTitle className="flex items-center gap-2 text-destructive"><Bug className="h-5 w-5" /> Vulnerability Findings ({results.length})</CardTitle></CardHeader>
-              <CardContent className="flex-1 overflow-auto p-4 space-y-4">
+              <CardContent ref={logResultsRef} className="flex-1 overflow-auto p-4 space-y-4">
                 {results.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-30">
                     <Search className="h-12 w-12 mb-2" />
