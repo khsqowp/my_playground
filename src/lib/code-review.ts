@@ -1,6 +1,6 @@
 import { callGemini } from "@/lib/ai";
 
-interface CodeReviewConfig {
+export interface CodeReviewConfig {
   id: string;
   discordWebhookUrl: string;
 }
@@ -8,6 +8,7 @@ interface CodeReviewConfig {
 interface GitHubPushPayload {
   ref?: string;
   head_commit?: {
+    id?: string;
     message?: string;
     author?: { name?: string };
     added?: string[];
@@ -29,15 +30,34 @@ async function sendDiscordMessage(url: string, content: string): Promise<void> {
   }
 }
 
+/**
+ * 단일 커밋에 대한 코드 리뷰 수행.
+ * webhookLogId 가 주어진 경우 중복 여부를 확인하고, 완료 후 CodeReviewLog 에 기록.
+ */
 export async function performCodeReview(
   payload: GitHubPushPayload,
-  config: CodeReviewConfig
+  config: CodeReviewConfig,
+  webhookLogId?: string
 ): Promise<void> {
+  const prisma = (await import("@/lib/prisma")).default;
+
+  // ── 중복 체크 ──────────────────────────────────────────────
+  if (webhookLogId) {
+    const existing = await prisma.codeReviewLog.findUnique({
+      where: { configId_webhookLogId: { configId: config.id, webhookLogId } },
+    });
+    if (existing) {
+      console.log(`[CODE_REVIEW] skip (already reviewed): ${webhookLogId}`);
+      return;
+    }
+  }
+
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
 
   const branch = payload.ref?.split("/").pop() || "unknown";
   const commit = payload.head_commit;
+  const commitSha = commit?.id || "";
   const message = commit?.message || "No message";
   const author = commit?.author?.name || "Unknown";
   const repo = payload.repository?.full_name || "unknown/repo";
@@ -60,13 +80,33 @@ export async function performCodeReview(
 
   const review = await callGemini(prompt, apiKey);
 
-  // Update lastReviewAt
-  const prisma = (await import("@/lib/prisma")).default;
+  // ── Discord 전송 ──────────────────────────────────────────
+  const shaLabel = commitSha ? ` \`${commitSha.substring(0, 7)}\`` : "";
+  const discordMessage =
+    `🔍 **코드 리뷰**${shaLabel} — \`${repo}\` (${branch})\n` +
+    `> ${message}\n> by ${author}\n\n${review}`;
+  await sendDiscordMessage(config.discordWebhookUrl, discordMessage);
+
+  // ── DB 기록 ────────────────────────────────────────────────
   await prisma.codeReviewConfig.update({
     where: { id: config.id },
     data: { lastReviewAt: new Date() },
   });
 
-  const discordMessage = `🔍 **코드 리뷰** — \`${repo}\` (${branch})\n> ${message}\n> by ${author}\n\n${review}`;
-  await sendDiscordMessage(config.discordWebhookUrl, discordMessage);
+  if (webhookLogId) {
+    await prisma.codeReviewLog.create({
+      data: {
+        configId: config.id,
+        webhookLogId,
+        commitSha: commitSha || null,
+      },
+    });
+  }
+}
+
+/**
+ * push 이벤트인지 판별 (ping·기타 이벤트 제외)
+ */
+export function isPushPayload(payload: any): boolean {
+  return !!(payload?.head_commit || (payload?.ref && Array.isArray(payload?.commits)));
 }

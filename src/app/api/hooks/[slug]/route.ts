@@ -110,14 +110,14 @@ export async function POST(
         });
     }
 
-    // 코드 리뷰 자동화 (fire-and-forget)
+    // 코드 리뷰 자동화 (fire-and-forget, webhookLogId 전달로 중복 방지)
     const githubEvent = request.headers.get("x-github-event");
     if (githubEvent && githubEvent !== "ping") {
         const reviewConfig = await prisma.codeReviewConfig.findFirst({
             where: { incomingWebhookId: webhook.id, enabled: true }
         });
         if (reviewConfig) {
-            performCodeReview(payload, reviewConfig).catch(e =>
+            performCodeReview(payload, reviewConfig, log.id).catch(e =>
                 console.error("[CODE_REVIEW]", e.message)
             );
         }

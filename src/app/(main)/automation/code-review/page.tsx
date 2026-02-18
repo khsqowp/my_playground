@@ -125,11 +125,17 @@ export default function CodeReviewPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ configId }),
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "실행 실패");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "실행 실패");
+
+      if (data.queued === 0) {
+        toast.info(data.message || "새로운 커밋이 없습니다.");
+      } else {
+        toast.success(
+          `${data.queued}개 커밋 리뷰 시작! (전체 ${data.total}건 중 기검토 ${data.alreadyReviewed}건 제외)\nDiscord로 순차 전송됩니다.`,
+          { duration: 5000 }
+        );
       }
-      toast.success("코드 리뷰가 Discord로 전송되었습니다!");
       fetchData();
     } catch (err: any) {
       toast.error(err.message || "실행 중 오류가 발생했습니다.");
