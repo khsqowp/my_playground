@@ -159,6 +159,12 @@ function CommitRow({
   );
 }
 
+async function safeJson(res: Response): Promise<any> {
+  const text = await res.text();
+  if (!text.trim()) return {};
+  try { return JSON.parse(text); } catch { return {}; }
+}
+
 export default function CodeReviewPage() {
   const [configs, setConfigs] = useState<any[]>([]);
   const [webhooks, setWebhooks] = useState<any[]>([]);
@@ -265,8 +271,8 @@ export default function CodeReviewPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ configId }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "새로고침 실패");
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.error || `새로고침 실패 (${res.status})`);
       setSyncMap((prev) => ({
         ...prev,
         [configId]: { ...prev[configId], commits: data.commits || [], loading: false, lastSynced: new Date() },
@@ -321,22 +327,35 @@ export default function CodeReviewPage() {
     const s = syncMap[configId];
     if (!s || s.selectedShas.size === 0) return;
 
+    const queuedShas = new Set(s.selectedShas);
     setSyncMap((prev) => ({ ...prev, [configId]: { ...prev[configId], reviewing: true } }));
     try {
       const res = await fetch("/api/automation/code-review/trigger", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ configId, commitShas: Array.from(s.selectedShas) }),
+        body: JSON.stringify({ configId, commitShas: Array.from(queuedShas) }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "실패");
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.error || `서버 오류 (${res.status})`);
       toast.success(
         `${data.queued}개 커밋 분석 시작! Discord로 순차 전송됩니다.`,
         { duration: 5000 }
       );
-      clearSelect(configId);
-      // 4초 후 자동 새로고침
-      setTimeout(() => refreshSync(configId), 4000);
+      // 낙관적 업데이트: 선택된 커밋을 "완료" 상태로 표시 (재조회 없이)
+      setSyncMap((prev) => {
+        const cur = prev[configId];
+        if (!cur) return prev;
+        return {
+          ...prev,
+          [configId]: {
+            ...cur,
+            selectedShas: new Set(),
+            commits: cur.commits.map((c) =>
+              queuedShas.has(c.sha) ? { ...c, reviewed: true } : c
+            ),
+          },
+        };
+      });
     } catch (err: any) {
       toast.error(err.message || "오류가 발생했습니다.");
     } finally {
@@ -353,10 +372,23 @@ export default function CodeReviewPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ configId, commitShas: [sha] }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "실패");
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.error || `서버 오류 (${res.status})`);
       toast.success("리뷰 분석 시작! Discord로 전송됩니다.", { duration: 3000 });
-      setTimeout(() => refreshSync(configId), 3000);
+      // 낙관적 업데이트
+      setSyncMap((prev) => {
+        const cur = prev[configId];
+        if (!cur) return prev;
+        return {
+          ...prev,
+          [configId]: {
+            ...cur,
+            commits: cur.commits.map((c) =>
+              c.sha === sha ? { ...c, reviewed: true } : c
+            ),
+          },
+        };
+      });
     } catch (err: any) {
       toast.error(err.message || "오류가 발생했습니다.");
     } finally {

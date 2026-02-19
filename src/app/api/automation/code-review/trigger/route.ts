@@ -8,10 +8,12 @@ import {
 } from "@/lib/code-review";
 
 export async function POST(request: NextRequest) {
+  try {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { configId, commitShas, webhookLogIds } = await request.json();
+  const body = await request.json().catch(() => ({}));
+  const { configId, commitShas, webhookLogIds } = body as any;
   if (!configId) return NextResponse.json({ error: "configId required" }, { status: 400 });
 
   const config = await prisma.codeReviewConfig.findFirst({
@@ -98,4 +100,8 @@ export async function POST(request: NextRequest) {
     alreadyReviewed: reviewedShas.size,
     message: `${pending.length}개 커밋 리뷰를 백그라운드에서 처리합니다.`,
   });
+  } catch (e: any) {
+    console.error("[CODE_REVIEW_TRIGGER_ERROR]", e);
+    return NextResponse.json({ error: e.message || "서버 오류" }, { status: 500 });
+  }
 }
