@@ -16,9 +16,10 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  // ids: 특정 파일 ID 배열 | unclassifiedOnly: 미분류 전체
+  // ids: 특정 파일 ID 배열 | unclassifiedOnly: 미분류 전체 | failedOnly: 분석 실패 전체
   const ids: string[] | undefined = body.ids;
   const unclassifiedOnly: boolean = body.unclassifiedOnly === true;
+  const failedOnly: boolean = body.failedOnly === true;
 
   let files: { id: string; fileName: string; extension: string; filePath: string }[];
 
@@ -32,8 +33,13 @@ export async function POST(request: NextRequest) {
       where: { authorId: session.user.id, folder: "미분류" },
       select: { id: true, fileName: true, extension: true, filePath: true },
     });
+  } else if (failedOnly) {
+    files = await prisma.archiveFile.findMany({
+      where: { authorId: session.user.id, aiStatus: "FAILED" },
+      select: { id: true, fileName: true, extension: true, filePath: true },
+    });
   } else {
-    return NextResponse.json({ error: "ids or unclassifiedOnly required" }, { status: 400 });
+    return NextResponse.json({ error: "ids or unclassifiedOnly or failedOnly required" }, { status: 400 });
   }
 
   if (files.length === 0) {

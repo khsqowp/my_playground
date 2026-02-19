@@ -96,6 +96,7 @@ export async function performCodeReview(
         configId: config.id,
         webhookLogId,
         commitSha: commitSha || null,
+        reviewText: review,
       },
     });
   }

@@ -31,7 +31,10 @@ export async function GET(request: NextRequest) {
 
   const where: any = { authorId: session.user.id };
   if (folder) where.folder = folder;
-  if (search) {
+  if (search === "분석 실패") {
+    // 특수 키워드: FAILED 상태 파일만 (SKIPPED 제외)
+    where.aiStatus = "FAILED";
+  } else if (search) {
     where.OR = [
       { fileName: { contains: search, mode: "insensitive" } },
       { aiSummary: { contains: search, mode: "insensitive" } },

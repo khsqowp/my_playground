@@ -536,6 +536,7 @@ model CodeReviewLog {
   config        CodeReviewConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
   webhookLogId  String
   commitSha     String?
+  reviewText    String?  @db.Text
   createdAt     DateTime @default(now())
 
   @@unique([configId, webhookLogId])

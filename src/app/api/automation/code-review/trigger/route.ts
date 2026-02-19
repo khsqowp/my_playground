@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { configId } = await request.json();
+  const { configId, webhookLogIds } = await request.json();
   if (!configId) return NextResponse.json({ error: "configId required" }, { status: 400 });
 
   const config = await prisma.codeReviewConfig.findFirst({
@@ -35,8 +35,14 @@ export async function POST(request: NextRequest) {
   });
   const reviewedIds = new Set(reviewed.map((r: { webhookLogId: string }) => r.webhookLogId));
 
-  // ── 미검토 로그 필터 ────────────────────────────────────────
-  const pending = pushLogs.filter((l) => !reviewedIds.has(l.id));
+  // ── 개별 선택이면 해당 로그만, 아니면 미검토 전체 ────────────
+  let pending: typeof pushLogs;
+  if (Array.isArray(webhookLogIds) && webhookLogIds.length > 0) {
+    const selectedSet = new Set(webhookLogIds as string[]);
+    pending = pushLogs.filter((l) => selectedSet.has(l.id));
+  } else {
+    pending = pushLogs.filter((l) => !reviewedIds.has(l.id));
+  }
 
   if (pending.length === 0) {
     return NextResponse.json({ queued: 0, message: "새로운 커밋이 없습니다." });

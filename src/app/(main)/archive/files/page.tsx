@@ -198,6 +198,7 @@ export default function ArchiveFilesPage() {
   const [isBulkMoving, setIsBulkMoving] = useState(false);
   const [isBulkReclassifying, setIsBulkReclassifying] = useState(false);
   const [isReclassifyingAll, setIsReclassifyingAll] = useState(false);
+  const [isReclassifyingFailed, setIsReclassifyingFailed] = useState(false);
 
   const fetchFolders = useCallback(() => {
     fetch("/api/archive/files?folderList=1")
@@ -224,6 +225,20 @@ export default function ArchiveFilesPage() {
     fetchFolders();
     fetchFiles();
   }, [fetchFolders, fetchFiles]);
+
+  // 분석 실패 파일 자동 재시도: 마운트 시 1회 + 10분마다
+  useEffect(() => {
+    const reclassifyFailed = () => {
+      fetch("/api/archive/files/reclassify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ failedOnly: true }),
+      }).catch(() => {});
+    };
+    reclassifyFailed();
+    const interval = setInterval(reclassifyFailed, 10 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleFolderSelect = (folder: string) => {
     const next = selectedFolder === folder ? "" : folder;
@@ -421,6 +436,29 @@ export default function ArchiveFilesPage() {
     }
   };
 
+  // ── 분석 실패 재시도 ───────────────────────────────────
+  const handleReclassifyFailed = async () => {
+    setIsReclassifyingFailed(true);
+    try {
+      const res = await fetch("/api/archive/files/reclassify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ failedOnly: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "실패");
+      if (data.queued === 0) {
+        toast.info("분석 실패 파일이 없습니다.");
+      } else {
+        toast.success(`${data.queued}개 분석 실패 파일 재분류를 시작했습니다.`, { duration: 5000 });
+      }
+    } catch {
+      toast.error("재분류 중 오류가 발생했습니다.");
+    } finally {
+      setIsReclassifyingFailed(false);
+    }
+  };
+
   // ── 미분류 전체 자동 정리 ──────────────────────────────
   const handleReclassifyAll = async () => {
     const unclassifiedCount = files.filter((f) => f.folder === "미분류").length;
@@ -469,6 +507,20 @@ export default function ArchiveFilesPage() {
           파일 아카이브
         </h1>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleReclassifyFailed}
+            disabled={isReclassifyingFailed}
+            title="분석 실패 파일을 다시 시도합니다 (10분마다 자동 재시도)"
+          >
+            {isReclassifyingFailed ? (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RotateCcw className="mr-2 h-3.5 w-3.5" />
+            )}
+            실패 재시도
+          </Button>
           <Button
             variant="outline"
             size="sm"
