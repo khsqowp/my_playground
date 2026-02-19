@@ -105,10 +105,40 @@ export async function callAI(prompt: string): Promise<string> {
       call: () => callGemini(prompt, process.env.GEMINI_API_KEY4!),
     });
   }
+  if (process.env.GEMINI_API_KEY5) {
+    providers.push({
+      name: "Gemini (KEY5)",
+      call: () => callGemini(prompt, process.env.GEMINI_API_KEY5!),
+    });
+  }
+  if (process.env.GEMINI_API_KEY6) {
+    providers.push({
+      name: "Gemini (KEY6)",
+      call: () => callGemini(prompt, process.env.GEMINI_API_KEY6!),
+    });
+  }
+  if (process.env.GEMINI_API_KEY7) {
+    providers.push({
+      name: "Gemini (KEY7)",
+      call: () => callGemini(prompt, process.env.GEMINI_API_KEY7!),
+    });
+  }
+  if (process.env.GEMINI_API_KEY8) {
+    providers.push({
+      name: "Gemini (KEY8)",
+      call: () => callGemini(prompt, process.env.GEMINI_API_KEY8!),
+    });
+  }
+  if (process.env.GEMINI_API_KEY9) {
+    providers.push({
+      name: "Gemini (KEY9)",
+      call: () => callGemini(prompt, process.env.GEMINI_API_KEY9!),
+    });
+  }
 
   if (providers.length === 0) {
     throw new Error(
-      "AI API 키가 설정되지 않았습니다. (GEMINI_API_KEY, GROQ_API_KEY, GEMINI_API_KEY2~4 중 하나 필요)"
+      "AI API 키가 설정되지 않았습니다. (GEMINI_API_KEY, GROQ_API_KEY, GEMINI_API_KEY2~9 중 하나 필요)"
     );
   }
 
