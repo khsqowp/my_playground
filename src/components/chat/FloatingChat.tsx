@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { MessageCircle, X, Send, Bot, Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,11 +31,13 @@ function saveMessages(messages: Message[]) {
 }
 
 export function FloatingChat() {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [pageContext, setPageContext] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -43,6 +46,16 @@ export function FloatingChat() {
     setMessages(loadMessages());
     setHydrated(true);
   }, []);
+
+  // 페이지가 바뀔 때마다 <main> 텍스트 추출 (300ms 딜레이로 렌더 완료 대기)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const mainEl = document.querySelector("main");
+      const text = mainEl?.innerText?.trim() ?? "";
+      setPageContext(text.slice(0, 3000));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [pathname]);
 
   // 메시지 변경 시 localStorage 동기화
   useEffect(() => {
@@ -81,7 +94,12 @@ export function FloatingChat() {
       const res = await fetch("/api/persona/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({
+          message: text,
+          pageContext,
+          pagePath: pathname,
+          history: messages.slice(-6), // 최근 6개 메시지를 대화 맥락으로 전달
+        }),
       });
 
       if (!res.ok) throw new Error("응답 오류");
@@ -152,7 +170,8 @@ export function FloatingChat() {
             {messages.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-muted-foreground">
                 <Bot className="h-10 w-10 opacity-30" />
-                <p className="text-sm">무엇이든 물어보세요!</p>
+                <p className="text-sm">현재 페이지 내용을 기반으로 답변해드립니다.</p>
+                <p className="text-xs opacity-60">무엇이든 물어보세요!</p>
               </div>
             ) : (
               <div className="flex flex-col gap-3">
