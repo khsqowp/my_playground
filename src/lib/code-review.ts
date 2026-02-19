@@ -1,4 +1,4 @@
-import { callGemini } from "@/lib/ai";
+import { callAI } from "@/lib/ai";
 
 export interface CodeReviewConfig {
   id: string;
@@ -52,9 +52,6 @@ export async function performCodeReview(
     }
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
-
   const branch = payload.ref?.split("/").pop() || "unknown";
   const commit = payload.head_commit;
   const commitSha = commit?.id || "";
@@ -78,7 +75,7 @@ export async function performCodeReview(
 ⚠️ 개선점: 개선할 수 있는 부분
 💡 제안: 추가 제안`;
 
-  const review = await callGemini(prompt, apiKey);
+  const review = await callAI(prompt);
 
   // ── Discord 전송 ──────────────────────────────────────────
   const shaLabel = commitSha ? ` \`${commitSha.substring(0, 7)}\`` : "";

@@ -1,4 +1,4 @@
-import { callGemini } from "@/lib/ai";
+import { callAI } from "@/lib/ai";
 
 /** 파일명/확장자로 폴더를 추론 (텍스트 추출 불가 파일 fallback) */
 export function inferFolderFromFilename(fileName: string, ext: string): string {
@@ -84,8 +84,7 @@ export async function analyzeWithGemini(
   ext: string,
   content: string | null
 ): Promise<{ summary: string; tags: string; folder: string; status: string }> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || !content) {
+  if (!content) {
     return {
       summary: "",
       tags: "",
@@ -106,7 +105,7 @@ ${content}
 {"summary": "한국어 요약 2-3문장", "tags": "태그1,태그2,태그3,태그4,태그5", "folder": "상위/하위"}`;
 
   try {
-    const raw = await callGemini(prompt, apiKey);
+    const raw = await callAI(prompt);
     const cleaned = raw.replace(/```json\n?|\n?```/g, "").trim();
 
     let parsed: { summary: string; tags: string; folder?: string };
