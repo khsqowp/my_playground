@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { callGemini } from "@/lib/ai";
+import { callAI } from "@/lib/ai";
 
 async function sendToDiscord(url: string, content: string): Promise<void> {
   const res = await fetch(url, {
@@ -116,13 +116,8 @@ export async function POST(request: NextRequest) {
   });
 
   const truncated = logsText.substring(0, 8000);
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 });
-  }
-
   const prompt = `다음 개발 활동 로그를 한국어로 간결하게 요약해줘. 주요 사건, 이슈, 성과를 중심으로 3~5문장으로 작성해줘.\n\n${truncated}`;
-  const summary = await callGemini(prompt, apiKey);
+  const summary = await callAI(prompt);
 
   const message = `🤖 **AI 활동 보고서 (${dateStr})**\n\n${summary}`;
   await sendToDiscord(webhook.url, message.substring(0, 1950));

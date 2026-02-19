@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { callGemini } from "@/lib/ai";
+import { callAI } from "@/lib/ai";
 import { isServiceRequest, getServiceAuthorId } from "@/lib/service-auth";
 
 export async function POST(request: NextRequest) {
@@ -31,11 +31,6 @@ export async function POST(request: NextRequest) {
 
   const safeCount = Math.min(Math.max(Number(count) || 5, 1), 20);
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 });
-  }
-
   const truncatedContent = content ? content.substring(0, 3000) : "";
   const contentSection = truncatedContent
     ? `\n\n참고 내용:\n${truncatedContent}`
@@ -52,7 +47,7 @@ export async function POST(request: NextRequest) {
 ]`;
 
   try {
-    const raw = await callGemini(prompt, apiKey);
+    const raw = await callAI(prompt);
     const cleaned = raw.replace(/```json\n?|\n?```/g, "").trim();
     let questions: Array<{ question: string; answer: string; hint?: string }>;
 

@@ -21,6 +21,7 @@ services:
       - ADMIN_NAME=${ADMIN_NAME}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GROQ_API_KEY=${GROQ_API_KEY}
+      - GEMINI_API_KEY2=${GEMINI_API_KEY2}
       - SERVICE_API_KEY=${SERVICE_API_KEY}
     depends_on:
       - db
@@ -71,6 +72,7 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/88motorcycle
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GROQ_API_KEY=${GROQ_API_KEY}
+      - GEMINI_API_KEY2=${GEMINI_API_KEY2}
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
       - APP_INTERNAL_URL=http://app:3000
       - SERVICE_API_KEY=${SERVICE_API_KEY}

@@ -16,7 +16,7 @@ export async function callGemini(
     return result.response.text();
   } catch (error: any) {
     console.error("[GEMINI_API_ERROR]", error.message);
-    if (error.message?.includes("429")) {
+    if (error.message?.includes("429") || error.message?.includes("quota")) {
       throw new Error("RATE_LIMIT");
     }
     if (error.message?.includes("404") && modelName !== "gemini-2.5-flash") {
@@ -50,6 +50,7 @@ export async function callGroq(
 
   if (!res.ok) {
     const err = await res.text();
+    if (res.status === 429) throw new Error("RATE_LIMIT");
     throw new Error(`Groq 오류: ${res.status} ${err}`);
   }
 
@@ -58,34 +59,62 @@ export async function callGroq(
 }
 
 /**
- * 통합 AI 호출 — Gemini 우선, 429(쿼터 초과) 시 Groq로 자동 fallback
+ * 통합 AI 호출 — 3단계 순환 fallback
+ *
+ * 순서: GEMINI_API_KEY → GROQ_API_KEY → GEMINI_API_KEY2
+ * 각 단계에서 429(쿼터 초과)가 발생하면 다음 단계로 넘어감.
  */
 export async function callAI(prompt: string): Promise<string> {
-  const geminiKey = process.env.GEMINI_API_KEY;
-  const groqKey = process.env.GROQ_API_KEY;
+  type Provider = { name: string; call: () => Promise<string> };
 
-  if (geminiKey) {
+  const providers: Provider[] = [];
+
+  if (process.env.GEMINI_API_KEY) {
+    providers.push({
+      name: "Gemini (KEY1)",
+      call: () => callGemini(prompt, process.env.GEMINI_API_KEY!),
+    });
+  }
+  if (process.env.GROQ_API_KEY) {
+    providers.push({
+      name: "Groq (Llama 3.3 70B)",
+      call: () => callGroq(prompt, process.env.GROQ_API_KEY!),
+    });
+  }
+  if (process.env.GEMINI_API_KEY2) {
+    providers.push({
+      name: "Gemini (KEY2)",
+      call: () => callGemini(prompt, process.env.GEMINI_API_KEY2!),
+    });
+  }
+
+  if (providers.length === 0) {
+    throw new Error(
+      "AI API 키가 설정되지 않았습니다. (GEMINI_API_KEY, GROQ_API_KEY, GEMINI_API_KEY2 중 하나 필요)"
+    );
+  }
+
+  let lastError: Error | null = null;
+
+  for (const provider of providers) {
     try {
-      const result = await callGemini(prompt, geminiKey);
+      const result = await provider.call();
+      console.log(`[AI] 성공: ${provider.name}`);
       return result;
     } catch (e: any) {
-      if (e.message === "RATE_LIMIT" && groqKey) {
-        console.warn("[AI] Gemini 쿼터 초과 → Groq fallback");
-        return callGroq(prompt, groqKey);
-      }
-      // Groq도 없으면 원래 에러 메시지로 변환
       if (e.message === "RATE_LIMIT") {
-        throw new Error("AI 사용량이 초과되었습니다. 잠시 후 다시 시도해주세요.");
+        console.warn(`[AI] 쿼터 초과: ${provider.name} → 다음 제공자로 전환`);
+        lastError = e;
+        continue;
       }
+      // 쿼터 외 에러는 바로 throw
       throw e;
     }
   }
 
-  if (groqKey) {
-    return callGroq(prompt, groqKey);
-  }
-
-  throw new Error("AI API 키가 설정되지 않았습니다. (GEMINI_API_KEY 또는 GROQ_API_KEY 필요)");
+  throw new Error(
+    `모든 AI 제공자의 쿼터가 초과되었습니다. 잠시 후 다시 시도해주세요.\n(${providers.map((p) => p.name).join(" → ")} 모두 소진)`
+  );
 }
 
 /**
