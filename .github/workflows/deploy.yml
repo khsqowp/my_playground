@@ -47,6 +47,9 @@ jobs:
           )
           [System.IO.File]::WriteAllText("$pwd\.env", ($envLines -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
 
+          # 손상된 빌드 캐시 정리 (snapshot not found 오류 방지)
+          docker builder prune -f
+
           # 재빌드 및 재시작
           docker-compose down
           docker-compose up -d --build
