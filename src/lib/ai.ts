@@ -59,9 +59,9 @@ export async function callGroq(
 }
 
 /**
- * 통합 AI 호출 — 3단계 순환 fallback
+ * 통합 AI 호출 — 순환 fallback
  *
- * 순서: GEMINI_API_KEY → GROQ_API_KEY → GEMINI_API_KEY2
+ * 순서: GEMINI_API_KEY → GROQ_API_KEY → GEMINI_API_KEY2 → GEMINI_API_KEY3 → GEMINI_API_KEY4
  * 각 단계에서 429(쿼터 초과)가 발생하면 다음 단계로 넘어감.
  */
 export async function callAI(prompt: string): Promise<string> {
@@ -87,10 +87,22 @@ export async function callAI(prompt: string): Promise<string> {
       call: () => callGemini(prompt, process.env.GEMINI_API_KEY2!),
     });
   }
+  if (process.env.GEMINI_API_KEY3) {
+    providers.push({
+      name: "Gemini (KEY3)",
+      call: () => callGemini(prompt, process.env.GEMINI_API_KEY3!),
+    });
+  }
+  if (process.env.GEMINI_API_KEY4) {
+    providers.push({
+      name: "Gemini (KEY4)",
+      call: () => callGemini(prompt, process.env.GEMINI_API_KEY4!),
+    });
+  }
 
   if (providers.length === 0) {
     throw new Error(
-      "AI API 키가 설정되지 않았습니다. (GEMINI_API_KEY, GROQ_API_KEY, GEMINI_API_KEY2 중 하나 필요)"
+      "AI API 키가 설정되지 않았습니다. (GEMINI_API_KEY, GROQ_API_KEY, GEMINI_API_KEY2~4 중 하나 필요)"
     );
   }
 
