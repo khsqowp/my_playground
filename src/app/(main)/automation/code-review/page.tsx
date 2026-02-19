@@ -11,7 +11,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   GitPullRequest,
   Plus,
@@ -665,20 +664,18 @@ export default function CodeReviewPage() {
                           </div>
 
                           {/* 커밋 목록 */}
-                          <ScrollArea className="max-h-[520px] pr-1">
-                            <div className="space-y-2">
-                              {commits.map((commit) => (
-                                <CommitRow
-                                  key={commit.sha}
-                                  commit={commit}
-                                  selected={selectedShas.has(commit.sha)}
-                                  onSelect={() => toggleSelect(config.id, commit.sha)}
-                                  onReviewOne={(sha) => handleReviewOne(config.id, sha)}
-                                  reviewingThis={reviewingOne === commit.sha}
-                                />
-                              ))}
-                            </div>
-                          </ScrollArea>
+                          <div className="overflow-y-auto max-h-[520px] space-y-2 pr-1">
+                            {commits.map((commit) => (
+                              <CommitRow
+                                key={commit.sha}
+                                commit={commit}
+                                selected={selectedShas.has(commit.sha)}
+                                onSelect={() => toggleSelect(config.id, commit.sha)}
+                                onReviewOne={(sha) => handleReviewOne(config.id, sha)}
+                                reviewingThis={reviewingOne === commit.sha}
+                              />
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
