@@ -14,8 +14,6 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get("search") || "";
   const folder = searchParams.get("folder") || "";
   const folderList = searchParams.get("folderList") === "1";
-  const page = parseInt(searchParams.get("page") || "1");
-  const limit = parseInt(searchParams.get("limit") || "50");
 
   // Return unique folder list
   if (folderList) {
@@ -42,17 +40,12 @@ export async function GET(request: NextRequest) {
     ];
   }
 
-  const [files, total] = await Promise.all([
-    prisma.archiveFile.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * limit,
-      take: limit,
-    }),
-    prisma.archiveFile.count({ where }),
-  ]);
+  const files = await prisma.archiveFile.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+  });
 
-  return NextResponse.json({ files, total, page, totalPages: Math.ceil(total / limit) });
+  return NextResponse.json({ files, total: files.length });
 }
 
 export async function PATCH(request: NextRequest) {

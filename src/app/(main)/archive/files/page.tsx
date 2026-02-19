@@ -632,7 +632,10 @@ export default function ArchiveFilesPage() {
               )}
             >
               <FolderOpen className="h-3.5 w-3.5 shrink-0 text-primary" />
-              <span>전체 파일</span>
+              <span className="flex-1">전체 파일</span>
+              {!loading && (
+                <span className="text-xs text-muted-foreground font-normal">{files.length}</span>
+              )}
             </button>
             {folderTree.length > 0 && <div className="border-t border-border/50 pt-1" />}
             <FolderTree
@@ -672,10 +675,16 @@ export default function ArchiveFilesPage() {
             </Button>
           </div>
 
-          {selectedFolder && (
+          {!loading && (
             <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Folder className="h-3 w-3" />
-              {selectedFolder}
+              {selectedFolder ? (
+                <>
+                  <Folder className="h-3 w-3" />
+                  {selectedFolder} · {files.length}개
+                </>
+              ) : (
+                <>총 {files.length}개 파일</>
+              )}
             </p>
           )}
 
