@@ -41,7 +41,7 @@ jobs:
             "ADMIN_NAME=${{ secrets.ADMIN_NAME }}",
             "SERVICE_API_KEY=${{ secrets.SERVICE_API_KEY }}",
             "DISCORD_BOT_TOKEN=${{ secrets.DISCORD_BOT_TOKEN }}",
-            "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN_PAT }}",
+            "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN_PAT || github.token }}",
             "UPLOAD_MAX_SIZE_MB=100",
             "UPLOAD_DIR=./public/uploads"
           )

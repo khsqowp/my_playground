@@ -9,10 +9,12 @@ import { fetchGitHubBranches, fetchGitHubCommits } from "@/lib/code-review";
  * DB에 실제 저장은 하지 않음 — 리뷰 시 trigger 호출로 저장.
  */
 export async function POST(request: NextRequest) {
+  try {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { configId } = await request.json();
+  const body = await request.json().catch(() => ({}));
+  const { configId } = body as any;
   if (!configId) return NextResponse.json({ error: "configId required" }, { status: 400 });
 
   const config = await prisma.codeReviewConfig.findFirst({
@@ -76,4 +78,8 @@ export async function POST(request: NextRequest) {
     reviewed: result.filter((c) => c.reviewed).length,
     unreviewed: result.filter((c) => !c.reviewed).length,
   });
+  } catch (e: any) {
+    console.error("[CODE_REVIEW_SYNC_ERROR]", e.message);
+    return NextResponse.json({ error: e.message || "동기화 중 오류 발생" }, { status: 500 });
+  }
 }
