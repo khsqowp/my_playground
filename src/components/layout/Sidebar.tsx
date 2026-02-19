@@ -20,6 +20,8 @@ import {
   ShieldAlert,
   FileArchive,
   GitPullRequest,
+  Webhook,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -65,7 +67,9 @@ const navItems: NavItem[] = [
     href: "/automation",
     icon: Zap,
     children: [
+      { title: "웹훅", href: "/automation/webhooks", icon: Webhook },
       { title: "활동 로그", href: "/automation/logs", icon: Activity },
+      { title: "AI 자동화", href: "/automation/ai", icon: Sparkles },
       { title: "코드 리뷰", href: "/automation/code-review", icon: GitPullRequest },
     ],
   },
