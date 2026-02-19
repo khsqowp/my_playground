@@ -25,6 +25,7 @@ services:
       - GEMINI_API_KEY3=${GEMINI_API_KEY3}
       - GEMINI_API_KEY4=${GEMINI_API_KEY4}
       - SERVICE_API_KEY=${SERVICE_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
     depends_on:
       - db
     networks:

@@ -517,6 +517,7 @@ model CodeReviewConfig {
   incomingWebhookId String
   incomingWebhook   IncomingWebhook @relation(fields: [incomingWebhookId], references: [id], onDelete: Cascade)
   discordWebhookUrl String
+  githubRepo        String?  // "owner/repo" — GitHub API 동기화용
   enabled           Boolean  @default(true)
   lastReviewAt      DateTime?
 
@@ -534,11 +535,13 @@ model CodeReviewLog {
   id            String   @id @default(cuid())
   configId      String
   config        CodeReviewConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
-  webhookLogId  String
-  commitSha     String?
+  webhookLogId  String?           // 웹훅 수신 기반일 때만 채워짐
+  commitSha     String            // 중복 방지 기준
+  commitMessage String?  @db.Text
+  commitAuthor  String?
   reviewText    String?  @db.Text
   createdAt     DateTime @default(now())
 
-  @@unique([configId, webhookLogId])
+  @@unique([configId, commitSha])
   @@index([configId])
 }

@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { name, incomingWebhookId, discordWebhookUrl, enabled } = body;
+  const { name, incomingWebhookId, discordWebhookUrl, githubRepo, enabled } = body;
 
   if (!name || !incomingWebhookId || !discordWebhookUrl) {
     return NextResponse.json(
@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
       name,
       incomingWebhookId,
       discordWebhookUrl,
+      githubRepo: githubRepo?.trim() || null,
       enabled: enabled ?? true,
       userId: session.user.id,
     },
@@ -60,7 +61,7 @@ export async function PUT(request: NextRequest) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { id, name, discordWebhookUrl, enabled } = body;
+  const { id, name, discordWebhookUrl, githubRepo, enabled } = body;
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const config = await prisma.codeReviewConfig.update({
@@ -68,6 +69,7 @@ export async function PUT(request: NextRequest) {
     data: {
       ...(name !== undefined && { name }),
       ...(discordWebhookUrl !== undefined && { discordWebhookUrl }),
+      ...(githubRepo !== undefined && { githubRepo: githubRepo?.trim() || null }),
       ...(enabled !== undefined && { enabled }),
     },
     include: {

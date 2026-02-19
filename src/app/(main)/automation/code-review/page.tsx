@@ -16,65 +16,59 @@ import {
   GitPullRequest,
   Plus,
   Trash2,
-  Play,
   Loader2,
   ToggleLeft,
   ToggleRight,
-  ChevronDown,
-  ChevronRight,
   CheckSquare,
   Square,
   GitCommit,
-  FileText,
   CheckCircle2,
   Clock,
+  RefreshCw,
+  Play,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 
-interface CommitLog {
-  id: string;
-  createdAt: string;
-  ref: string;
-  repo: string;
-  commitSha: string | null;
-  commitMessage: string;
+interface Commit {
+  sha: string;
+  message: string;
   author: string;
-  added: string[];
-  modified: string[];
-  removed: string[];
+  date: string;
   reviewed: boolean;
   reviewText: string | null;
   reviewedAt: string | null;
 }
 
-interface CommitLogsState {
-  logs: CommitLog[];
+interface SyncState {
+  commits: Commit[];
   loading: boolean;
   expanded: boolean;
-  selectedIds: Set<string>;
+  selectedShas: Set<string>;
   reviewing: boolean;
   reviewingOne: string | null;
+  lastSynced: Date | null;
 }
 
 function CommitRow({
-  log,
+  commit,
   selected,
   onSelect,
   onReviewOne,
-  reviewing,
+  reviewingThis,
 }: {
-  log: CommitLog;
+  commit: Commit;
   selected: boolean;
   onSelect: () => void;
-  onReviewOne: (id: string) => void;
-  reviewing: boolean;
+  onReviewOne: (sha: string) => void;
+  reviewingThis: boolean;
 }) {
   const [showReview, setShowReview] = useState(false);
-  const branch = log.ref?.split("/").pop() || log.ref;
-  const totalChanged = log.added.length + log.modified.length + log.removed.length;
+  const firstLine = commit.message.split("\n")[0];
 
   return (
     <div
@@ -84,7 +78,6 @@ function CommitRow({
       )}
     >
       <div className="flex items-start gap-2">
-        {/* 체크박스 */}
         <button onClick={onSelect} className="mt-0.5 shrink-0">
           {selected ? (
             <CheckSquare className="h-4 w-4 text-primary" />
@@ -94,48 +87,26 @@ function CommitRow({
         </button>
 
         <div className="flex-1 min-w-0 space-y-1">
-          {/* 커밋 메시지 */}
-          <p className="text-sm font-medium leading-snug line-clamp-2">
-            {log.commitMessage || "(메시지 없음)"}
-          </p>
-          {/* 메타 */}
+          <p className="text-sm font-medium leading-snug line-clamp-2">{firstLine || "(메시지 없음)"}</p>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-            {log.commitSha && (
-              <span className="font-mono">{log.commitSha.substring(0, 7)}</span>
-            )}
-            <span>{log.author}</span>
-            <span className="font-mono text-primary/70">{branch}</span>
-            <span>{format(new Date(log.createdAt), "MM-dd HH:mm", { locale: ko })}</span>
+            <span className="font-mono text-primary/80">{commit.sha.substring(0, 7)}</span>
+            <span>{commit.author}</span>
+            <span>{format(new Date(commit.date), "yyyy-MM-dd HH:mm", { locale: ko })}</span>
           </div>
-          {/* 변경 파일 수 */}
-          {totalChanged > 0 && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              {log.added.length > 0 && (
-                <span className="text-green-600">+{log.added.length}</span>
-              )}
-              {log.modified.length > 0 && (
-                <span className="text-yellow-600">~{log.modified.length}</span>
-              )}
-              {log.removed.length > 0 && (
-                <span className="text-red-500">-{log.removed.length}</span>
-              )}
-              <span>파일 변경</span>
-            </div>
-          )}
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          {log.reviewed ? (
+          {commit.reviewed ? (
             <>
-              <Badge variant="default" className="text-xs gap-1">
+              <Badge variant="default" className="text-xs gap-1 shrink-0">
                 <CheckCircle2 className="h-3 w-3" />
-                리뷰 완료
+                완료
               </Badge>
-              {log.reviewText && (
+              {commit.reviewText && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 text-xs px-2"
+                  className="h-6 text-xs px-2 shrink-0"
                   onClick={() => setShowReview((v) => !v)}
                 >
                   {showReview ? "접기" : "보기"}
@@ -144,28 +115,27 @@ function CommitRow({
             </>
           ) : (
             <>
-              <Badge variant="secondary" className="text-xs gap-1">
+              <Badge variant="secondary" className="text-xs gap-1 shrink-0">
                 <Clock className="h-3 w-3" />
                 미검토
               </Badge>
               <Button
                 size="sm"
                 variant="outline"
-                className="h-6 text-xs px-2"
-                onClick={() => onReviewOne(log.id)}
-                disabled={reviewing}
+                className="h-6 text-xs px-2 shrink-0"
+                onClick={() => onReviewOne(commit.sha)}
+                disabled={reviewingThis}
               >
-                {reviewing ? <Loader2 className="h-3 w-3 animate-spin" /> : "리뷰"}
+                {reviewingThis ? <Loader2 className="h-3 w-3 animate-spin" /> : "리뷰"}
               </Button>
             </>
           )}
         </div>
       </div>
 
-      {/* 리뷰 내용 */}
-      {showReview && log.reviewText && (
+      {showReview && commit.reviewText && (
         <div className="mt-2 rounded-md bg-muted p-3 text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed border-l-2 border-primary/30">
-          {log.reviewText}
+          {commit.reviewText}
         </div>
       )}
     </div>
@@ -177,15 +147,16 @@ export default function CodeReviewPage() {
   const [webhooks, setWebhooks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<any | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
 
-  // 커밋 로그 상태 — configId → state
-  const [logsMap, setLogsMap] = useState<Record<string, CommitLogsState>>({});
+  const [syncMap, setSyncMap] = useState<Record<string, SyncState>>({});
 
   const [form, setForm] = useState({
     name: "",
     incomingWebhookId: "",
     discordWebhookUrl: "",
+    githubRepo: "",
     enabled: true,
   });
   const [saving, setSaving] = useState(false);
@@ -200,9 +171,11 @@ export default function CodeReviewPage() {
       const configsData = await configsRes.json();
       const webhooksData = await webhooksRes.json();
       if (Array.isArray(configsData)) setConfigs(configsData);
-      if (Array.isArray(webhooksData)) setWebhooks(webhooksData);
-      if (Array.isArray(webhooksData) && webhooksData.length > 0) {
-        setForm((prev) => ({ ...prev, incomingWebhookId: webhooksData[0].id }));
+      if (Array.isArray(webhooksData)) {
+        setWebhooks(webhooksData);
+        if (webhooksData.length > 0) {
+          setForm((prev) => ({ ...prev, incomingWebhookId: webhooksData[0].id }));
+        }
       }
     } finally {
       setLoading(false);
@@ -213,168 +186,210 @@ export default function CodeReviewPage() {
     fetchData();
   }, []);
 
-  // ── 커밋 로그 토글 ───────────────────────────────────────
-  const toggleLogs = async (configId: string) => {
-    const current = logsMap[configId];
+  // ── GitHub 동기화 ────────────────────────────────────────────
+  const syncGitHub = async (configId: string) => {
+    const current = syncMap[configId];
 
-    if (current?.expanded) {
-      setLogsMap((prev) => ({
-        ...prev,
-        [configId]: { ...prev[configId], expanded: false },
-      }));
+    if (current?.expanded && current?.commits.length > 0) {
+      // 토글 닫기
+      setSyncMap((prev) => ({ ...prev, [configId]: { ...prev[configId], expanded: false } }));
       return;
     }
 
-    // 첫 열기 또는 새로고침
-    setLogsMap((prev) => ({
+    setSyncMap((prev) => ({
       ...prev,
       [configId]: {
-        logs: current?.logs || [],
+        commits: current?.commits || [],
         loading: true,
         expanded: true,
-        selectedIds: current?.selectedIds || new Set(),
+        selectedShas: current?.selectedShas || new Set(),
         reviewing: false,
         reviewingOne: null,
+        lastSynced: current?.lastSynced || null,
       },
     }));
 
     try {
-      const res = await fetch(`/api/automation/code-review/logs?configId=${configId}`);
+      const res = await fetch("/api/automation/code-review/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ configId }),
+      });
       const data = await res.json();
-      setLogsMap((prev) => ({
+      if (!res.ok) throw new Error(data.error || "동기화 실패");
+
+      setSyncMap((prev) => ({
         ...prev,
         [configId]: {
           ...prev[configId],
-          logs: data.logs || [],
+          commits: data.commits || [],
           loading: false,
+          lastSynced: new Date(),
         },
       }));
-    } catch {
-      setLogsMap((prev) => ({
-        ...prev,
-        [configId]: { ...prev[configId], loading: false },
-      }));
-      toast.error("로그 조회 중 오류가 발생했습니다.");
-    }
-  };
-
-  // ── 개별 로그 선택 토글 ──────────────────────────────────
-  const toggleLogSelect = (configId: string, logId: string) => {
-    setLogsMap((prev) => {
-      const state = prev[configId];
-      if (!state) return prev;
-      const next = new Set(state.selectedIds);
-      if (next.has(logId)) next.delete(logId);
-      else next.add(logId);
-      return { ...prev, [configId]: { ...state, selectedIds: next } };
-    });
-  };
-
-  const selectAllLogs = (configId: string) => {
-    setLogsMap((prev) => {
-      const state = prev[configId];
-      if (!state) return prev;
-      const allIds = new Set(state.logs.map((l) => l.id));
-      return { ...prev, [configId]: { ...state, selectedIds: allIds } };
-    });
-  };
-
-  const clearLogSelect = (configId: string) => {
-    setLogsMap((prev) => {
-      const state = prev[configId];
-      if (!state) return prev;
-      return { ...prev, [configId]: { ...state, selectedIds: new Set() } };
-    });
-  };
-
-  // ── 선택 커밋 일괄 리뷰 ─────────────────────────────────
-  const handleReviewSelected = async (configId: string) => {
-    const state = logsMap[configId];
-    if (!state || state.selectedIds.size === 0) return;
-
-    setLogsMap((prev) => ({ ...prev, [configId]: { ...prev[configId], reviewing: true } }));
-    try {
-      const res = await fetch("/api/automation/code-review/trigger", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          configId,
-          webhookLogIds: Array.from(state.selectedIds),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "실패");
-
-      if (data.queued === 0) {
-        toast.info("처리할 커밋이 없습니다.");
-      } else {
-        toast.success(
-          `${data.queued}개 커밋 리뷰 시작! Discord로 순차 전송됩니다.`,
-          { duration: 5000 }
-        );
-      }
-      clearLogSelect(configId);
-      // 로그 새로고침
-      setTimeout(() => {
-        setLogsMap((prev) => ({ ...prev, [configId]: { ...prev[configId], expanded: false } }));
-        setTimeout(() => toggleLogs(configId), 100);
-      }, 3000);
+      toast.success(
+        `${data.total}개 커밋 로드 완료 (완료 ${data.reviewed} / 미검토 ${data.unreviewed})`,
+        { duration: 4000 }
+      );
     } catch (err: any) {
-      toast.error(err.message || "오류가 발생했습니다.");
-    } finally {
-      setLogsMap((prev) => ({ ...prev, [configId]: { ...prev[configId], reviewing: false } }));
+      setSyncMap((prev) => ({ ...prev, [configId]: { ...prev[configId], loading: false } }));
+      toast.error(err.message || "동기화 중 오류가 발생했습니다.");
     }
   };
 
-  // ── 단일 커밋 즉시 리뷰 ─────────────────────────────────
-  const handleReviewOne = async (configId: string, logId: string) => {
-    setLogsMap((prev) => ({
+  const refreshSync = async (configId: string) => {
+    setSyncMap((prev) => ({
       ...prev,
-      [configId]: { ...prev[configId], reviewingOne: logId },
+      [configId]: { ...prev[configId], loading: true },
     }));
     try {
-      const res = await fetch("/api/automation/code-review/trigger", {
+      const res = await fetch("/api/automation/code-review/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ configId, webhookLogIds: [logId] }),
+        body: JSON.stringify({ configId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "실패");
-      toast.success("리뷰 완료! Discord로 전송됩니다.", { duration: 4000 });
-      // 3초 뒤 로그 새로고침
-      setTimeout(() => {
-        setLogsMap((prev) => ({ ...prev, [configId]: { ...prev[configId], expanded: false } }));
-        setTimeout(() => toggleLogs(configId), 100);
-      }, 3000);
-    } catch (err: any) {
-      toast.error(err.message || "오류가 발생했습니다.");
-    } finally {
-      setLogsMap((prev) => ({
+      if (!res.ok) throw new Error(data.error || "새로고침 실패");
+      setSyncMap((prev) => ({
         ...prev,
-        [configId]: { ...prev[configId], reviewingOne: null },
+        [configId]: { ...prev[configId], commits: data.commits || [], loading: false, lastSynced: new Date() },
       }));
+    } catch (err: any) {
+      setSyncMap((prev) => ({ ...prev, [configId]: { ...prev[configId], loading: false } }));
+      toast.error(err.message);
     }
   };
 
-  const handleCreate = async () => {
+  // ── 선택 ─────────────────────────────────────────────────────
+  const toggleSelect = (configId: string, sha: string) => {
+    setSyncMap((prev) => {
+      const s = prev[configId];
+      if (!s) return prev;
+      const next = new Set(s.selectedShas);
+      if (next.has(sha)) next.delete(sha);
+      else next.add(sha);
+      return { ...prev, [configId]: { ...s, selectedShas: next } };
+    });
+  };
+
+  const selectAll = (configId: string) => {
+    setSyncMap((prev) => {
+      const s = prev[configId];
+      if (!s) return prev;
+      return { ...prev, [configId]: { ...s, selectedShas: new Set(s.commits.map((c) => c.sha)) } };
+    });
+  };
+
+  const selectUnreviewed = (configId: string) => {
+    setSyncMap((prev) => {
+      const s = prev[configId];
+      if (!s) return prev;
+      return {
+        ...prev,
+        [configId]: { ...s, selectedShas: new Set(s.commits.filter((c) => !c.reviewed).map((c) => c.sha)) },
+      };
+    });
+  };
+
+  const clearSelect = (configId: string) => {
+    setSyncMap((prev) => {
+      const s = prev[configId];
+      if (!s) return prev;
+      return { ...prev, [configId]: { ...s, selectedShas: new Set() } };
+    });
+  };
+
+  // ── 일괄 리뷰 ────────────────────────────────────────────────
+  const handleReviewSelected = async (configId: string) => {
+    const s = syncMap[configId];
+    if (!s || s.selectedShas.size === 0) return;
+
+    setSyncMap((prev) => ({ ...prev, [configId]: { ...prev[configId], reviewing: true } }));
+    try {
+      const res = await fetch("/api/automation/code-review/trigger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ configId, commitShas: Array.from(s.selectedShas) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "실패");
+      toast.success(
+        `${data.queued}개 커밋 분석 시작! Discord로 순차 전송됩니다.`,
+        { duration: 5000 }
+      );
+      clearSelect(configId);
+      // 4초 후 자동 새로고침
+      setTimeout(() => refreshSync(configId), 4000);
+    } catch (err: any) {
+      toast.error(err.message || "오류가 발생했습니다.");
+    } finally {
+      setSyncMap((prev) => ({ ...prev, [configId]: { ...prev[configId], reviewing: false } }));
+    }
+  };
+
+  // ── 단일 리뷰 ────────────────────────────────────────────────
+  const handleReviewOne = async (configId: string, sha: string) => {
+    setSyncMap((prev) => ({ ...prev, [configId]: { ...prev[configId], reviewingOne: sha } }));
+    try {
+      const res = await fetch("/api/automation/code-review/trigger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ configId, commitShas: [sha] }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "실패");
+      toast.success("리뷰 분석 시작! Discord로 전송됩니다.", { duration: 3000 });
+      setTimeout(() => refreshSync(configId), 3000);
+    } catch (err: any) {
+      toast.error(err.message || "오류가 발생했습니다.");
+    } finally {
+      setSyncMap((prev) => ({ ...prev, [configId]: { ...prev[configId], reviewingOne: null } }));
+    }
+  };
+
+  // ── CRUD ─────────────────────────────────────────────────────
+  const openCreate = () => {
+    setEditTarget(null);
+    setForm({ name: "", incomingWebhookId: webhooks[0]?.id || "", discordWebhookUrl: "", githubRepo: "", enabled: true });
+    setOpen(true);
+  };
+
+  const openEdit = (config: any) => {
+    setEditTarget(config);
+    setForm({
+      name: config.name,
+      incomingWebhookId: config.incomingWebhookId,
+      discordWebhookUrl: config.discordWebhookUrl,
+      githubRepo: config.githubRepo || "",
+      enabled: config.enabled,
+    });
+    setOpen(true);
+  };
+
+  const handleSave = async () => {
     if (!form.name.trim() || !form.incomingWebhookId || !form.discordWebhookUrl.trim()) {
-      toast.error("모든 필드를 입력해주세요.");
+      toast.error("이름, 웹훅, Discord URL은 필수입니다.");
       return;
     }
     setSaving(true);
     try {
-      const res = await fetch("/api/automation/code-review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+      const res = editTarget
+        ? await fetch("/api/automation/code-review", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: editTarget.id, ...form }),
+          })
+        : await fetch("/api/automation/code-review", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(form),
+          });
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || "생성 실패");
+        throw new Error(err.error || "저장 실패");
       }
-      toast.success("코드 리뷰 설정이 생성되었습니다.");
+      toast.success(editTarget ? "수정되었습니다." : "설정이 생성되었습니다.");
       setOpen(false);
-      setForm({ name: "", incomingWebhookId: webhooks[0]?.id || "", discordWebhookUrl: "", enabled: true });
       fetchData();
     } catch (err: any) {
       toast.error(err.message || "오류가 발생했습니다.");
@@ -411,7 +426,7 @@ export default function CodeReviewPage() {
       if (!res.ok) throw new Error("삭제 실패");
       toast.success("삭제되었습니다.");
       setConfigs((prev) => prev.filter((c) => c.id !== id));
-      setLogsMap((prev) => { const n = { ...prev }; delete n[id]; return n; });
+      setSyncMap((prev) => { const n = { ...prev }; delete n[id]; return n; });
     } catch {
       toast.error("삭제 중 오류가 발생했습니다.");
     } finally {
@@ -426,15 +441,14 @@ export default function CodeReviewPage() {
           <GitPullRequest className="h-6 w-6 text-primary" />
           GitHub 코드 리뷰 자동화
         </h1>
-        <Button onClick={() => setOpen(true)}>
+        <Button onClick={openCreate}>
           <Plus className="mr-2 h-4 w-4" />
           설정 추가
         </Button>
       </div>
 
       <p className="text-sm text-muted-foreground">
-        GitHub 웹훅 수신 시 AI가 자동으로 코드 리뷰를 생성하여 Discord로 전송합니다.
-        커밋 기록을 펼쳐 개별 선택 후 분석·저장할 수 있습니다.
+        GitHub 레포지토리를 연결하면 전체 커밋 이력을 불러와 누락된 커밋을 AI로 분석·저장합니다.
       </p>
 
       {loading ? (
@@ -447,72 +461,87 @@ export default function CodeReviewPage() {
         <Card className="p-12 text-center text-muted-foreground border-dashed">
           <GitPullRequest className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p>코드 리뷰 설정이 없습니다.</p>
-          <p className="text-sm mt-1">GitHub 인입 웹훅과 Discord 웹훅을 연결해보세요.</p>
+          <p className="text-sm mt-1">설정을 추가하고 GitHub 레포지토리를 연결해보세요.</p>
         </Card>
       ) : (
         <div className="space-y-4">
           {configs.map((config) => {
-            const logState = logsMap[config.id];
-            const isExpanded = logState?.expanded ?? false;
-            const logs = logState?.logs ?? [];
-            const selectedIds = logState?.selectedIds ?? new Set<string>();
-            const reviewing = logState?.reviewing ?? false;
-            const reviewingOne = logState?.reviewingOne ?? null;
-            const unreviewed = logs.filter((l) => !l.reviewed).length;
+            const s = syncMap[config.id];
+            const isExpanded = s?.expanded ?? false;
+            const commits = s?.commits ?? [];
+            const selectedShas = s?.selectedShas ?? new Set<string>();
+            const reviewing = s?.reviewing ?? false;
+            const reviewingOne = s?.reviewingOne ?? null;
+            const unreviewed = commits.filter((c) => !c.reviewed).length;
+            const hasGithub = !!config.githubRepo;
 
             return (
               <Card key={config.id} className="overflow-hidden">
                 <CardContent className="p-0">
-                  {/* Config 헤더 */}
+                  {/* 헤더 */}
                   <div className="flex items-center justify-between gap-4 p-4">
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold">{config.name}</span>
                         <Badge variant={config.enabled ? "default" : "secondary"}>
                           {config.enabled ? "활성" : "비활성"}
                         </Badge>
+                        {config.githubRepo && (
+                          <Badge variant="outline" className="font-mono text-xs">
+                            {config.githubRepo}
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        웹훅: {config.incomingWebhook?.name} (
-                        <code>/api/hooks/{config.incomingWebhook?.slug}</code>)
+                        웹훅: {config.incomingWebhook?.name}
                       </p>
                       {config.lastReviewAt && (
                         <p className="text-xs text-muted-foreground">
-                          마지막 리뷰:{" "}
-                          {format(new Date(config.lastReviewAt), "yyyy-MM-dd HH:mm", { locale: ko })}
+                          마지막 리뷰: {format(new Date(config.lastReviewAt), "yyyy-MM-dd HH:mm", { locale: ko })}
+                        </p>
+                      )}
+                      {s?.lastSynced && (
+                        <p className="text-xs text-muted-foreground">
+                          동기화: {format(s.lastSynced, "HH:mm:ss")} — {commits.length}개 커밋
+                          {unreviewed > 0 && (
+                            <span className="text-yellow-600 ml-1">(미검토 {unreviewed})</span>
+                          )}
                         </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleToggle(config)}
-                        title={config.enabled ? "비활성화" : "활성화"}
-                      >
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                      <Button variant="ghost" size="icon" onClick={() => handleToggle(config)}>
                         {config.enabled ? (
                           <ToggleRight className="h-5 w-5 text-primary" />
                         ) : (
                           <ToggleLeft className="h-5 w-5 text-muted-foreground" />
                         )}
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => toggleLogs(config.id)}
-                      >
-                        {isExpanded ? (
-                          <ChevronDown className="mr-1.5 h-3.5 w-3.5" />
-                        ) : (
-                          <ChevronRight className="mr-1.5 h-3.5 w-3.5" />
-                        )}
-                        커밋 기록
-                        {unreviewed > 0 && !isExpanded && (
-                          <Badge variant="destructive" className="ml-1.5 text-[10px] px-1.5 py-0">
-                            {unreviewed}
-                          </Badge>
-                        )}
+                      <Button variant="outline" size="sm" onClick={() => openEdit(config)}>
+                        수정
                       </Button>
+                      {hasGithub && (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => syncGitHub(config.id)}
+                          disabled={s?.loading}
+                        >
+                          {s?.loading ? (
+                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          ) : isExpanded ? (
+                            <ChevronDown className="mr-1.5 h-3.5 w-3.5" />
+                          ) : (
+                            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                          )}
+                          {isExpanded ? "접기" : "커밋 불러오기"}
+                          {!isExpanded && unreviewed > 0 && (
+                            <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">
+                              {unreviewed}
+                            </Badge>
+                          )}
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -529,47 +558,77 @@ export default function CodeReviewPage() {
                     </div>
                   </div>
 
-                  {/* 커밋 로그 확장 패널 */}
-                  {isExpanded && (
+                  {/* githubRepo 미설정 안내 */}
+                  {!hasGithub && (
+                    <div className="border-t px-4 py-3 bg-muted/30">
+                      <p className="text-xs text-muted-foreground">
+                        GitHub 레포지토리를 설정하면 전체 커밋 이력을 불러올 수 있습니다. (수정 버튼 →{" "}
+                        <span className="font-mono">owner/repo</span> 형식으로 입력)
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 커밋 목록 패널 */}
+                  {isExpanded && hasGithub && (
                     <div className="border-t">
-                      {logState?.loading ? (
-                        <div className="flex items-center justify-center py-8">
+                      {s?.loading ? (
+                        <div className="flex items-center justify-center py-10">
                           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                          <span className="ml-2 text-sm text-muted-foreground">로그 조회 중...</span>
+                          <span className="ml-2 text-sm text-muted-foreground">
+                            GitHub에서 커밋 이력을 불러오는 중...
+                          </span>
                         </div>
-                      ) : logs.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                      ) : commits.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
                           <GitCommit className="h-8 w-8 opacity-30 mb-2" />
-                          <p className="text-sm">수신된 push 이벤트가 없습니다.</p>
+                          <p className="text-sm">커밋이 없거나 레포지토리에 접근할 수 없습니다.</p>
                         </div>
                       ) : (
                         <div className="p-4 space-y-3">
                           {/* 툴바 */}
                           <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                              <span>총 {logs.length}개 커밋</span>
-                              <span className="text-green-600">완료 {logs.filter(l => l.reviewed).length}</span>
+                            <div className="flex items-center gap-3 text-sm">
+                              <span className="text-muted-foreground">총 {commits.length}개</span>
+                              <span className="text-green-600">완료 {commits.filter((c) => c.reviewed).length}</span>
                               <span className="text-yellow-600">미검토 {unreviewed}</span>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => refreshSync(config.id)}
+                                disabled={s?.loading}
+                              >
+                                <RefreshCw className="mr-1 h-3 w-3" />
+                                새로고침
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => selectUnreviewed(config.id)}
+                              >
+                                미검토 선택
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 className="h-7 text-xs"
                                 onClick={() =>
-                                  selectedIds.size === logs.length
-                                    ? clearLogSelect(config.id)
-                                    : selectAllLogs(config.id)
+                                  selectedShas.size === commits.length
+                                    ? clearSelect(config.id)
+                                    : selectAll(config.id)
                                 }
                               >
-                                {selectedIds.size === logs.length ? (
+                                {selectedShas.size === commits.length ? (
                                   <CheckSquare className="mr-1 h-3.5 w-3.5 text-primary" />
                                 ) : (
                                   <Square className="mr-1 h-3.5 w-3.5" />
                                 )}
-                                {selectedIds.size === logs.length ? "전체 해제" : "전체 선택"}
+                                {selectedShas.size === commits.length ? "전체 해제" : "전체 선택"}
                               </Button>
-                              {selectedIds.size > 0 && (
+                              {selectedShas.size > 0 && (
                                 <Button
                                   size="sm"
                                   className="h-7 text-xs"
@@ -581,23 +640,23 @@ export default function CodeReviewPage() {
                                   ) : (
                                     <Play className="mr-1 h-3 w-3" />
                                   )}
-                                  {selectedIds.size}개 리뷰 분석
+                                  {selectedShas.size}개 AI 분석
                                 </Button>
                               )}
                             </div>
                           </div>
 
                           {/* 커밋 목록 */}
-                          <ScrollArea className="max-h-[480px] pr-1">
+                          <ScrollArea className="max-h-[520px] pr-1">
                             <div className="space-y-2">
-                              {logs.map((log) => (
+                              {commits.map((commit) => (
                                 <CommitRow
-                                  key={log.id}
-                                  log={log}
-                                  selected={selectedIds.has(log.id)}
-                                  onSelect={() => toggleLogSelect(config.id, log.id)}
-                                  onReviewOne={(id) => handleReviewOne(config.id, id)}
-                                  reviewing={reviewingOne === log.id}
+                                  key={commit.sha}
+                                  commit={commit}
+                                  selected={selectedShas.has(commit.sha)}
+                                  onSelect={() => toggleSelect(config.id, commit.sha)}
+                                  onReviewOne={(sha) => handleReviewOne(config.id, sha)}
+                                  reviewingThis={reviewingOne === commit.sha}
                                 />
                               ))}
                             </div>
@@ -613,10 +672,11 @@ export default function CodeReviewPage() {
         </div>
       )}
 
+      {/* 설정 추가/수정 다이얼로그 */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>코드 리뷰 설정 추가</DialogTitle>
+            <DialogTitle>{editTarget ? "코드 리뷰 설정 수정" : "코드 리뷰 설정 추가"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1">
@@ -657,14 +717,30 @@ export default function CodeReviewPage() {
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">
+                GitHub 레포지토리{" "}
+                <span className="font-normal text-muted-foreground">(전체 이력 동기화용, 선택)</span>
+              </label>
+              <input
+                type="text"
+                value={form.githubRepo}
+                onChange={(e) => setForm({ ...form, githubRepo: e.target.value })}
+                placeholder="owner/repo (예: khsqowp/my_playground)"
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary font-mono"
+              />
+              <p className="text-xs text-muted-foreground">
+                비공개 레포는 서버에 GITHUB_TOKEN 환경변수가 필요합니다.
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)} disabled={saving}>
               취소
             </Button>
-            <Button onClick={handleCreate} disabled={saving}>
+            <Button onClick={handleSave} disabled={saving}>
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              생성
+              {editTarget ? "수정" : "생성"}
             </Button>
           </DialogFooter>
         </DialogContent>
