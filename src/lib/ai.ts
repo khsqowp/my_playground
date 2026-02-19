@@ -59,10 +59,16 @@ export async function callGroq(
 }
 
 /**
- * 통합 AI 호출 — 순환 fallback
+ * 라운드로빈 인덱스 — 요청마다 서로 다른 프로바이더부터 시작해 RPM 분산
+ */
+let rrIndex = 0;
+
+/**
+ * 통합 AI 호출 — 라운드로빈 + fallback
  *
- * 순서: GEMINI_API_KEY → GROQ_API_KEY → GEMINI_API_KEY2 → GEMINI_API_KEY3 → GEMINI_API_KEY4
- * 각 단계에서 429(쿼터 초과)가 발생하면 다음 단계로 넘어감.
+ * 프로바이더: GEMINI_API_KEY → GROQ_API_KEY → GEMINI_API_KEY2 → GEMINI_API_KEY3 → GEMINI_API_KEY4
+ * 매 성공 후 다음 호출은 다음 프로바이더부터 시작 (RPM 분산).
+ * 각 단계에서 429(쿼터 초과)가 발생하면 다음 제공자로 넘어감.
  */
 export async function callAI(prompt: string): Promise<string> {
   type Provider = { name: string; call: () => Promise<string> };
@@ -107,11 +113,15 @@ export async function callAI(prompt: string): Promise<string> {
   }
 
   let lastError: Error | null = null;
+  const startIdx = rrIndex % providers.length;
 
-  for (const provider of providers) {
+  for (let i = 0; i < providers.length; i++) {
+    const idx = (startIdx + i) % providers.length;
+    const provider = providers[idx];
     try {
       const result = await provider.call();
       console.log(`[AI] 성공: ${provider.name}`);
+      rrIndex = (idx + 1) % providers.length;
       return result;
     } catch (e: any) {
       if (e.message === "RATE_LIMIT") {

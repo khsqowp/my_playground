@@ -84,8 +84,8 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        // Gemini rate limit 방지 딜레이
-        await new Promise((r) => setTimeout(r, 800));
+        // Gemini rate limit 방지 딜레이 (20 RPM = 3s/req, 라운드로빈으로 분산되므로 3.5s 유지)
+        await new Promise((r) => setTimeout(r, 3500));
       } catch (e: any) {
         console.error(`[RECLASSIFY] id=${file.id}`, e.message);
       }
