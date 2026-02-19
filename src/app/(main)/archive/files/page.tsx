@@ -22,6 +22,7 @@ import {
   Search,
   CheckCircle2,
   XCircle,
+  MinusCircle,
   Clock,
   FolderOpen,
   Folder,
@@ -72,7 +73,7 @@ function formatBytes(bytes: number): string {
 
 interface QueueItem {
   file: File;
-  status: "waiting" | "uploading" | "done" | "error";
+  status: "waiting" | "uploading" | "done" | "skipped" | "error";
   error?: string;
 }
 
@@ -303,9 +304,18 @@ export default function ArchiveFilesPage() {
     formData.append("file", item.file);
     try {
       const res = await fetch("/api/archive/files/upload", { method: "POST", body: formData });
+      // 중복 파일 → 스킵 처리 (에러 아님)
+      if (res.status === 409) {
+        setQueue((prev) =>
+          prev.map((q, i) => (i === index ? { ...q, status: "skipped", error: "중복 파일 건너뜀" } : q))
+        );
+        return true;
+      }
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "업로드 실패");
+        const text = await res.text();
+        let errMsg = `업로드 실패 (${res.status})`;
+        try { errMsg = JSON.parse(text)?.error || errMsg; } catch {}
+        throw new Error(errMsg);
       }
       setQueue((prev) => prev.map((q, i) => (i === index ? { ...q, status: "done" } : q)));
       return true;
@@ -577,6 +587,9 @@ export default function ArchiveFilesPage() {
                 {item.status === "done" && (
                   <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
                 )}
+                {item.status === "skipped" && (
+                  <MinusCircle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                )}
                 {item.status === "error" && (
                   <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />
                 )}
@@ -584,6 +597,7 @@ export default function ArchiveFilesPage() {
                   className={cn(
                     "truncate",
                     item.status === "done" && "text-muted-foreground",
+                    item.status === "skipped" && "text-muted-foreground line-through",
                     item.status === "error" && "text-destructive"
                   )}
                 >

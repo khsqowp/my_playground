@@ -69,6 +69,7 @@ async function buildZipTree(buffer: Buffer): Promise<ZipEntry[]> {
 }
 
 export async function POST(request: NextRequest) {
+  try {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -93,6 +94,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: `파일 크기(${(file.size / 1024 / 1024).toFixed(1)}MB)가 50MB 제한을 초과했습니다.` },
       { status: 400 }
+    );
+  }
+
+  // 중복 파일 체크 (같은 사용자, 같은 파일명)
+  const duplicate = await prisma.archiveFile.findFirst({
+    where: { fileName: file.name, authorId: session.user.id },
+    select: { id: true },
+  });
+  if (duplicate) {
+    return NextResponse.json(
+      { error: "이미 동일한 파일이 존재합니다.", code: "DUPLICATE", fileId: duplicate.id },
+      { status: 409 }
     );
   }
 
@@ -151,4 +164,8 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json(record, { status: 201 });
+  } catch (e: any) {
+    console.error("[UPLOAD_ERROR]", e.message);
+    return NextResponse.json({ error: e.message || "업로드 중 오류 발생" }, { status: 500 });
+  }
 }
