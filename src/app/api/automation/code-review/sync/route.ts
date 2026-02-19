@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { fetchGitHubCommits } from "@/lib/code-review";
+import { fetchGitHubBranches, fetchGitHubCommits } from "@/lib/code-review";
 
 /**
  * POST /api/automation/code-review/sync
- * GitHub API로 레포 전체 커밋 목록을 가져와 리뷰 여부와 함께 반환.
+ * 모든 브랜치의 커밋을 가져와 SHA 기준으로 중복 제거 후 리뷰 여부와 함께 반환.
  * DB에 실제 저장은 하지 않음 — 리뷰 시 trigger 호출로 저장.
  */
 export async function POST(request: NextRequest) {
@@ -26,8 +26,31 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // GitHub API로 전체 커밋 목록 조회
-  const commits = await fetchGitHubCommits(config.githubRepo);
+  // 모든 브랜치 조회 (최대 100개)
+  const branches = await fetchGitHubBranches(config.githubRepo);
+
+  // 브랜치별 커밋을 SHA 기준으로 병합 (중복 제거, branches[] 추적)
+  const commitMap = new Map<
+    string,
+    { sha: string; message: string; author: string; date: string; branches: string[] }
+  >();
+
+  for (const branch of branches) {
+    const branchCommits = await fetchGitHubCommits(config.githubRepo, branch);
+    for (const c of branchCommits) {
+      const existing = commitMap.get(c.sha);
+      if (existing) {
+        if (!existing.branches.includes(branch)) existing.branches.push(branch);
+      } else {
+        commitMap.set(c.sha, { ...c, branches: [branch] });
+      }
+    }
+  }
+
+  // 날짜 내림차순 정렬
+  const commits = Array.from(commitMap.values()).sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  );
 
   // 이미 리뷰된 SHA 목록 조회
   const reviewLogs = await prisma.codeReviewLog.findMany({
@@ -48,6 +71,7 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     commits: result,
+    branches,
     total: result.length,
     reviewed: result.filter((c) => c.reviewed).length,
     unreviewed: result.filter((c) => !c.reviewed).length,

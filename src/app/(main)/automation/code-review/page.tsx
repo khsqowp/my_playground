@@ -28,6 +28,7 @@ import {
   Play,
   ChevronDown,
   ChevronRight,
+  GitBranch,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -39,6 +40,7 @@ interface Commit {
   message: string;
   author: string;
   date: string;
+  branches?: string[];
   reviewed: boolean;
   reviewText: string | null;
   reviewedAt: string | null;
@@ -93,6 +95,22 @@ function CommitRow({
             <span>{commit.author}</span>
             <span>{format(new Date(commit.date), "yyyy-MM-dd HH:mm", { locale: ko })}</span>
           </div>
+          {commit.branches && commit.branches.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1 mt-0.5">
+              <GitBranch className="h-3 w-3 text-muted-foreground shrink-0" />
+              {commit.branches.slice(0, 4).map((b) => (
+                <span
+                  key={b}
+                  className="inline-flex items-center rounded px-1.5 py-0 text-[10px] font-mono bg-muted text-muted-foreground border"
+                >
+                  {b}
+                </span>
+              ))}
+              {commit.branches.length > 4 && (
+                <span className="text-[10px] text-muted-foreground">+{commit.branches.length - 4}</span>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
@@ -228,7 +246,7 @@ export default function CodeReviewPage() {
         },
       }));
       toast.success(
-        `${data.total}개 커밋 로드 완료 (완료 ${data.reviewed} / 미검토 ${data.unreviewed})`,
+        `${data.total}개 커밋 로드 완료 — 브랜치 ${data.branches?.length ?? 1}개 (완료 ${data.reviewed} / 미검토 ${data.unreviewed})`,
         { duration: 4000 }
       );
     } catch (err: any) {

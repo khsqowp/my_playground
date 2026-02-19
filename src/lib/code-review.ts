@@ -26,6 +26,7 @@ export interface GitHubCommitSummary {
   message: string;
   author: string;
   date: string;
+  branches?: string[];
 }
 
 interface GitHubCommitFile {
@@ -60,15 +61,46 @@ function githubHeaders(): Record<string, string> {
 }
 
 /**
- * GitHub 레포의 전체 커밋 목록을 최신순으로 반환 (페이지네이션 자동 처리)
+ * GitHub 레포의 브랜치 목록 반환 (최대 100개)
  */
-export async function fetchGitHubCommits(repo: string): Promise<GitHubCommitSummary[]> {
-  const commits: GitHubCommitSummary[] = [];
+export async function fetchGitHubBranches(repo: string): Promise<string[]> {
+  const branches: string[] = [];
   let page = 1;
 
   while (true) {
     const res = await fetch(
-      `https://api.github.com/repos/${repo}/commits?per_page=100&page=${page}`,
+      `https://api.github.com/repos/${repo}/branches?per_page=100&page=${page}`,
+      { headers: githubHeaders() }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(`GitHub API 오류: ${res.status} ${(err as any).message || ""}`);
+    }
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) break;
+    branches.push(...data.map((b: any) => b.name as string));
+    if (data.length < 100) break;
+    page++;
+  }
+
+  return branches;
+}
+
+/**
+ * GitHub 레포의 커밋 목록을 최신순으로 반환 (페이지네이션 자동 처리)
+ * branch를 지정하면 해당 브랜치의 커밋만 반환.
+ */
+export async function fetchGitHubCommits(
+  repo: string,
+  branch?: string
+): Promise<GitHubCommitSummary[]> {
+  const commits: GitHubCommitSummary[] = [];
+  let page = 1;
+  const branchParam = branch ? `&sha=${encodeURIComponent(branch)}` : "";
+
+  while (true) {
+    const res = await fetch(
+      `https://api.github.com/repos/${repo}/commits?per_page=100&page=${page}${branchParam}`,
       { headers: githubHeaders() }
     );
     if (!res.ok) {
