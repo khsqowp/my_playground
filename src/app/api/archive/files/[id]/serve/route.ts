@@ -66,6 +66,7 @@ export async function GET(
           "Accept-Ranges": "bytes",
           "Content-Length": String(chunkSize),
           "Cache-Control": "private, max-age=3600",
+          "X-Frame-Options": "SAMEORIGIN",
         },
       });
     }
@@ -103,6 +104,7 @@ export async function GET(
       "Content-Length": String(fileSize),
       "Accept-Ranges": "bytes",
       "Cache-Control": "private, max-age=3600",
+      "X-Frame-Options": "SAMEORIGIN",
     },
   });
 }

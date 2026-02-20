@@ -31,18 +31,18 @@ const nextConfig: NextConfig = {
 
     return [
       {
-        // 파일 서빙 엔드포인트: 같은 출처 iframe 허용 (PDF 미리보기)
-        source: "/api/archive/files/:id/serve",
-        headers: [
-          ...commonHeaders,
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
-        ],
-      },
-      {
+        // 일반 규칙: 먼저 적용 (모든 경로에 DENY)
         source: "/(.*)",
         headers: [
           ...commonHeaders,
           { key: "X-Frame-Options", value: "DENY" },
+        ],
+      },
+      {
+        // 파일 서빙 엔드포인트: 나중에 적용하여 SAMEORIGIN으로 덮어씀 (PDF iframe 허용)
+        source: "/api/archive/files/:id/serve",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
         ],
       },
     ];
