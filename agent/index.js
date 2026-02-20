@@ -24,43 +24,23 @@ async function connectToDB(retries = 0) {
 }
 
 // -------------------------------------------------------------------------
-// 1. 블로그 자동 태깅 (로직 판별 후 최신 3개만 AI 처리)
+// 1. 블로그 자동 태깅 (앱 내부 API 호출 — callAI 라운드로빈 활용)
 // -------------------------------------------------------------------------
-async function autoTagPosts(client, model) {
-    log("Task: Auto-tag Blog Posts (Checking untagged)...");
+async function autoTagPosts() {
+    log("Task: Auto-tag Blog Posts via API...");
     try {
-        // 태그가 0개인 글을 최신순으로 3개 가져옴
-        const res = await client.query(`
-            SELECT p.id, p.title, p.content
-            FROM "Post" p
-            LEFT JOIN "TagOnPost" tp ON p.id = tp."postId"
-            WHERE p.published = true
-            GROUP BY p.id, p.title, p.content, p."createdAt"
-            HAVING COUNT(tp."tagId") = 0
-            ORDER BY p."createdAt" DESC
-            LIMIT 3
-        `);
-
-        if (res.rows.length === 0) {
-            log("No untagged posts found. Skipping.");
-            return;
-        }
-
-        for (const post of res.rows) {
-            log(`AI Analyzing: ${post.title}`);
-            const prompt = `다음 블로그 글의 핵심 IT 기술 태그 5개를 콤마로 구분해서 써줘: ${post.title}\n\n내용: ${post.content.substring(0, 1500)}`;
-            const result = await model.generateContent(prompt);
-            const tags = result.response.text().split(',').map(t => t.trim()).filter(t => t.length > 0);
-
-            for (const tagName of tags) {
-                const tagId = 'tag_' + Date.now() + Math.random().toString(36).substring(7);
-                await client.query('INSERT INTO "Tag" (id, name) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name', [tagId, tagName]);
-                const realTag = await client.query('SELECT id FROM "Tag" WHERE name = $1', [tagName]);
-                await client.query('INSERT INTO "TagOnPost" ("postId", "tagId") VALUES ($1, $2) ON CONFLICT DO NOTHING', [post.id, realTag.rows[0].id]);
-            }
-            log(`✅ Successfully tagged: ${post.title}`);
-            await new Promise(r => setTimeout(r, 5000));
-        }
+        const appUrl = process.env.APP_INTERNAL_URL || 'http://app:3000';
+        const serviceKey = process.env.SERVICE_API_KEY || '';
+        const res = await fetch(`${appUrl}/api/cron/blog-tags`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-service-key': serviceKey,
+            },
+        });
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        const data = await res.json();
+        log(`✅ Blog tags: ${data.message}`);
     } catch (err) { log(`❌ Auto-tag Error: ${err.message}`); }
 }
 
@@ -287,8 +267,8 @@ async function main() {
     // 30분마다 데이터 수집
     cron.schedule('*/30 * * * *', () => syncProjectData(client));
 
-    // 새벽 4시 자동 태깅
-    cron.schedule('0 4 * * *', () => model && autoTagPosts(client, model));
+    // 새벽 2시 자동 태깅 (callAI 라운드로빈으로 모든 API 키 활용)
+    cron.schedule('0 2 * * *', () => autoTagPosts());
 
     // 자정 정기 보고 (원본)
     cron.schedule('0 0 * * *', () => sendMidnightReport(client));
@@ -296,7 +276,7 @@ async function main() {
     // Discord 봇 시작
     await startDiscordBot(model);
 
-    log("OpenClaw is standby. Tasks: 30m Sync, 4am Tagging, 0am Report, Discord Bot.");
+    log("OpenClaw is standby. Tasks: 30m Sync, 2am Tagging, 0am Report, Discord Bot.");
 }
 
 main().catch(err => console.error(err));

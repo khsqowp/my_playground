@@ -15,7 +15,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { MarkdownEditor } from "@/components/blog/MarkdownEditor";
 import { toast } from "sonner";
-import { Loader2, Save, Trash2 } from "lucide-react";
+import { Loader2, Save, Trash2, Sparkles } from "lucide-react";
 
 export default function BlogEditPage() {
   const router = useRouter();
@@ -30,6 +30,7 @@ export default function BlogEditPage() {
   const [coverImage, setCoverImage] = useState("");
   const [published, setPublished] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [regenTagging, setRegenTagging] = useState(false);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [createdAt, setCreatedAt] = useState("");
 
@@ -83,6 +84,21 @@ export default function BlogEditPage() {
     }
   }
 
+  async function handleRegenTags() {
+    setRegenTagging(true);
+    try {
+      const res = await fetch(`/api/blog/${id}/regen-tags`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "태그 생성 실패");
+      setTags(data.tags.join(", "));
+      toast.success(`태그가 재생성되었습니다: ${data.tags.join(", ")}`);
+    } catch (e: any) {
+      toast.error(e.message || "태그 재생성에 실패했습니다");
+    } finally {
+      setRegenTagging(false);
+    }
+  }
+
   async function handleDelete() {
     if (!confirm("이 글을 삭제하시겠습니까?")) return;
     await fetch(`/api/blog/${id}`, { method: "DELETE" });
@@ -121,6 +137,21 @@ export default function BlogEditPage() {
           <div className="space-y-2">
             <Label>태그</Label>
             <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="react, nextjs" />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={handleRegenTags}
+              disabled={regenTagging}
+            >
+              {regenTagging ? (
+                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="mr-2 h-3.5 w-3.5" />
+              )}
+              AI 태그 재생성
+            </Button>
           </div>
 
           <div className="space-y-2">

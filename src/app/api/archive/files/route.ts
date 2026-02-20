@@ -28,16 +28,33 @@ export async function GET(request: NextRequest) {
   }
 
   const where: any = { authorId: session.user.id };
-  if (folder) where.folder = folder;
+  const andClauses: any[] = [];
+
+  // 폴더 필터: 정확히 일치 OR 하위 폴더 (부모 클릭 시 자식 파일 포함)
+  if (folder) {
+    andClauses.push({
+      OR: [
+        { folder: folder },
+        { folder: { startsWith: folder + "/" } },
+      ],
+    });
+  }
+
   if (search === "분석 실패") {
     // 특수 키워드: FAILED 상태 파일만 (SKIPPED 제외)
     where.aiStatus = "FAILED";
   } else if (search) {
-    where.OR = [
-      { fileName: { contains: search, mode: "insensitive" } },
-      { aiSummary: { contains: search, mode: "insensitive" } },
-      { aiTags: { contains: search, mode: "insensitive" } },
-    ];
+    andClauses.push({
+      OR: [
+        { fileName: { contains: search, mode: "insensitive" } },
+        { aiSummary: { contains: search, mode: "insensitive" } },
+        { aiTags: { contains: search, mode: "insensitive" } },
+      ],
+    });
+  }
+
+  if (andClauses.length > 0) {
+    where.AND = andClauses;
   }
 
   const files = await prisma.archiveFile.findMany({
