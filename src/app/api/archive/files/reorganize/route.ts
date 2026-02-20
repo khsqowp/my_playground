@@ -7,7 +7,7 @@ import { normalizeFolder } from "@/lib/archive-utils";
 const BATCH_SIZE = 60; // 프롬프트 크기 제한을 위해 배치 처리
 
 /**
- * 파일 배치를 Gemini에 보내 폴더 재분류 요청
+ * 파일 배치를 AI에 보내 폴더 재분류 요청
  * taxonomy: 이미 결정된 폴더 목록 (일관성 유지)
  */
 async function classifyBatch(
@@ -77,61 +77,67 @@ export async function POST(request: NextRequest) {
   });
 
   if (files.length === 0) {
-    return NextResponse.json({ updated: 0, message: "파일이 없습니다." });
+    return NextResponse.json({ started: false, total: 0, message: "파일이 없습니다." });
   }
 
   const validIds = new Set(files.map((f) => f.id));
-  const allAssignments: Array<{ id: string; folder: string }> = [];
-  let taxonomy: string[] = [];
+  const authorId = session.user.id;
 
-  // 배치 처리 (BATCH_SIZE개씩 나눠서 Gemini 호출)
-  for (let i = 0; i < files.length; i += BATCH_SIZE) {
-    const batch = files.slice(i, i + BATCH_SIZE);
-    try {
-      const batchResult = await classifyBatch(batch, taxonomy);
-      if (Array.isArray(batchResult)) {
-        const valid = batchResult.filter(
-          (a) => a.id && typeof a.folder === "string" && validIds.has(a.id)
-        );
-        allAssignments.push(...valid);
-        // 이 배치에서 나온 폴더들을 taxonomy에 추가 (중복 제거)
-        const newFolders = valid.map((a) => normalizeFolder(a.folder)).filter(Boolean);
-        taxonomy = [...new Set([...taxonomy, ...newFolders])];
+  // 즉시 응답 반환 후 백그라운드에서 배치 처리 (nginx 60s 타임아웃 방지)
+  ;(async () => {
+    const allAssignments: Array<{ id: string; folder: string }> = [];
+    let taxonomy: string[] = [];
+
+    for (let i = 0; i < files.length; i += BATCH_SIZE) {
+      const batch = files.slice(i, i + BATCH_SIZE);
+      try {
+        const batchResult = await classifyBatch(batch, taxonomy);
+        if (Array.isArray(batchResult)) {
+          const valid = batchResult.filter(
+            (a) => a.id && typeof a.folder === "string" && validIds.has(a.id)
+          );
+          allAssignments.push(...valid);
+          // 이 배치에서 나온 폴더들을 taxonomy에 추가 (중복 제거)
+          const newFolders = valid.map((a) => normalizeFolder(a.folder)).filter(Boolean);
+          taxonomy = [...new Set([...taxonomy, ...newFolders])];
+        }
+      } catch (e: any) {
+        console.error(`[REORGANIZE] 배치 ${i / BATCH_SIZE + 1} 실패:`, e.message);
+        // 배치 실패 시 해당 배치 스킵, 나머지 계속
       }
-    } catch (e: any) {
-      console.error(`[REORGANIZE] 배치 ${i / BATCH_SIZE + 1} 실패:`, e.message);
-      // 배치 실패 시 해당 배치 스킵, 나머지 계속
+
+      // 배치 간 딜레이 (rate limit 방지)
+      if (i + BATCH_SIZE < files.length) {
+        await new Promise((r) => setTimeout(r, 1500));
+      }
     }
 
-    // 배치 간 딜레이 (rate limit 방지)
-    if (i + BATCH_SIZE < files.length) {
-      await new Promise((r) => setTimeout(r, 1500));
+    if (allAssignments.length === 0) {
+      console.error("[REORGANIZE] AI가 폴더를 재분류하지 못했습니다.");
+      return;
     }
-  }
 
-  if (allAssignments.length === 0) {
-    return NextResponse.json({ error: "AI가 폴더를 재분류하지 못했습니다. 잠시 후 다시 시도해주세요." }, { status: 500 });
-  }
-
-  // 배치 DB 업데이트
-  let updated = 0;
-  for (const { id, folder } of allAssignments) {
-    const normalized = normalizeFolder(folder);
-    if (!normalized) continue;
-    try {
-      await prisma.archiveFile.updateMany({
-        where: { id, authorId: session.user.id },
-        data: { folder: normalized },
-      });
-      updated++;
-    } catch (e) {
-      console.error(`[REORGANIZE] update failed for id=${id}`, e);
+    // DB 업데이트
+    let updated = 0;
+    for (const { id, folder } of allAssignments) {
+      const normalized = normalizeFolder(folder);
+      if (!normalized) continue;
+      try {
+        await prisma.archiveFile.updateMany({
+          where: { id, authorId },
+          data: { folder: normalized },
+        });
+        updated++;
+      } catch (e) {
+        console.error(`[REORGANIZE] update failed for id=${id}`, e);
+      }
     }
-  }
+    console.log(`[REORGANIZE] 완료: ${updated}/${files.length}개 파일 폴더 재구성`);
+  })().catch((e) => console.error("[REORGANIZE_ERROR]", e));
 
   return NextResponse.json({
-    updated,
+    started: true,
     total: files.length,
-    message: `${updated}개 파일의 폴더를 재구성했습니다.`,
+    message: `${files.length}개 파일 폴더 재구성을 백그라운드에서 시작했습니다.`,
   });
 }

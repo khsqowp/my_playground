@@ -488,10 +488,16 @@ export default function ArchiveFilesPage() {
       const res = await fetch("/api/archive/files/reorganize", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "실패");
-      toast.success(`${data.updated}개 파일의 폴더를 재구성했습니다.`, { duration: 5000 });
-      fetchFolders();
-      fetchFiles(search, "");
-      setSelectedFolder("");
+      toast.success(
+        `${data.total}개 파일 폴더 재구성을 시작했습니다. 약 1~2분 후 새로고침하세요.`,
+        { duration: 8000 }
+      );
+      // 백그라운드 처리 완료 예상 시간 후 자동 새로고침
+      setTimeout(() => {
+        fetchFolders();
+        fetchFiles(search, "");
+        setSelectedFolder("");
+      }, 90000); // 90초 후 자동 새로고침
     } catch (e: any) {
       toast.error(e.message || "재구성 중 오류가 발생했습니다.");
     } finally {
