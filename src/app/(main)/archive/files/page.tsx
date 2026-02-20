@@ -33,6 +33,7 @@ import {
   FolderInput,
   Sparkles,
   RotateCcw,
+  Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -200,6 +201,7 @@ export default function ArchiveFilesPage() {
   const [isBulkReclassifying, setIsBulkReclassifying] = useState(false);
   const [isReclassifyingAll, setIsReclassifyingAll] = useState(false);
   const [isReclassifyingFailed, setIsReclassifyingFailed] = useState(false);
+  const [isReorganizing, setIsReorganizing] = useState(false);
 
   const fetchFolders = useCallback(() => {
     fetch("/api/archive/files?folderList=1")
@@ -469,6 +471,34 @@ export default function ArchiveFilesPage() {
     }
   };
 
+  // ── 전체 폴더 재구성 (글로벌 클러스터링) ──────────────
+  const handleReorganizeAll = async () => {
+    const totalCount = files.length;
+    if (
+      !confirm(
+        `전체 파일(${totalCount}개)의 폴더 구조를 AI로 최적화합니다.\n` +
+          "비슷한 폴더들이 통합되고 일관성 없는 이름이 정리됩니다.\n" +
+          "기존 폴더 분류가 변경될 수 있습니다. 계속하시겠습니까?"
+      )
+    )
+      return;
+
+    setIsReorganizing(true);
+    try {
+      const res = await fetch("/api/archive/files/reorganize", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "실패");
+      toast.success(`${data.updated}개 파일의 폴더를 재구성했습니다.`, { duration: 5000 });
+      fetchFolders();
+      fetchFiles(search, "");
+      setSelectedFolder("");
+    } catch (e: any) {
+      toast.error(e.message || "재구성 중 오류가 발생했습니다.");
+    } finally {
+      setIsReorganizing(false);
+    }
+  };
+
   // ── 미분류 전체 자동 정리 ──────────────────────────────
   const handleReclassifyAll = async () => {
     const unclassifiedCount = files.filter((f) => f.folder === "미분류").length;
@@ -518,6 +548,20 @@ export default function ArchiveFilesPage() {
         </h1>
         <div className="flex items-center gap-2">
           <Button
+            variant="outline"
+            size="sm"
+            onClick={handleReorganizeAll}
+            disabled={isReorganizing}
+            title="전체 파일을 AI로 일괄 분석하여 폴더 구조를 최적화합니다 (비슷한 폴더 통합, 일관성 개선)"
+          >
+            {isReorganizing ? (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Wand2 className="mr-2 h-3.5 w-3.5" />
+            )}
+            전체 재구성
+          </Button>
+                    <Button
             variant="outline"
             size="sm"
             onClick={handleReclassifyFailed}

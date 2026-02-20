@@ -7,6 +7,7 @@ import {
   inferFolderFromFilename,
   extractTextContent,
   analyzeWithGemini,
+  normalizeFolder,
 } from "@/lib/archive-utils";
 
 export async function POST(request: NextRequest) {
@@ -50,6 +51,14 @@ export async function POST(request: NextRequest) {
 
   // 백그라운드에서 순차 처리 (Gemini rate limit 고려)
   ;(async () => {
+    // 기존 폴더 목록을 배치 시작 시 1회 조회 (일관성 유지)
+    const folderRows = await prisma.archiveFile.findMany({
+      where: { authorId: session.user.id },
+      select: { folder: true },
+      distinct: ["folder"],
+    });
+    const existingFolders = folderRows.map((r: { folder: string }) => r.folder);
+
     for (const file of files) {
       try {
         const absPath = path.join(process.cwd(), "public", file.filePath);
@@ -76,13 +85,14 @@ export async function POST(request: NextRequest) {
           const { summary, tags, folder, status } = await analyzeWithGemini(
             file.fileName,
             ext,
-            content
+            content,
+            existingFolders
           );
 
           await prisma.archiveFile.update({
             where: { id: file.id },
             data: {
-              folder: folder || inferFolderFromFilename(file.fileName, ext),
+              folder: normalizeFolder(folder || inferFolderFromFilename(file.fileName, ext)),
               aiSummary: summary || undefined,
               aiTags: tags || undefined,
               aiStatus: status as any,

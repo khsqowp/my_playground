@@ -8,6 +8,7 @@ import {
   inferFolderFromFilename,
   extractTextContent,
   analyzeWithGemini,
+  normalizeFolder,
 } from "@/lib/archive-utils";
 
 const ALLOWED_EXTENSIONS = ["zip", "pdf", "txt", "md", "docx", "xlsx", "pptx"];
@@ -144,8 +145,16 @@ export async function POST(request: NextRequest) {
   });
 
   if (!isSkipped) {
+    // 기존 폴더 목록 조회 → Gemini에게 전달하여 일관성 유지
+    const folderRows = await prisma.archiveFile.findMany({
+      where: { authorId: session.user.id },
+      select: { folder: true },
+      distinct: ["folder"],
+    });
+    const existingFolders = folderRows.map((r: { folder: string }) => r.folder);
+
     const content = await extractTextContent(buffer, ext);
-    const { summary, tags, folder, status } = await analyzeWithGemini(file.name, ext, content);
+    const { summary, tags, folder, status } = await analyzeWithGemini(file.name, ext, content, existingFolders);
 
     await prisma.archiveFile.update({
       where: { id: record.id },

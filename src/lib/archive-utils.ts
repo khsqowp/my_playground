@@ -1,5 +1,18 @@
 import { callAI } from "@/lib/ai";
 
+/**
+ * 폴더명 정규화: 각 세그먼트에서 공백·언더스코어 제거
+ * "웹 보안" → "웹보안", "네트워크_분析" → "네트워크분析"
+ */
+export function normalizeFolder(folder: string): string {
+  return folder
+    .split("/")
+    .map((seg) => seg.trim().replace(/[\s_]+/g, ""))
+    .filter(Boolean)
+    .join("/")
+    .replace(/\/+/g, "/");
+}
+
 /** 파일명/확장자로 폴더를 추론 (텍스트 추출 불가 파일 fallback) */
 export function inferFolderFromFilename(fileName: string, ext: string): string {
   const name = fileName.toLowerCase().replace(/\.[^.]+$/, "");
@@ -20,7 +33,7 @@ export function inferFolderFromFilename(fileName: string, ext: string): string {
     [["note", "노트", "study", "공부", "학습"], "학습/노트"],
     [["quiz", "퀴즈", "exam", "시험", "test"], "학습/시험"],
     [["design", "디자인", "ui", "ux", "figma", "wireframe"], "디자인"],
-    [["data", "dataset", "분석", "analysis", "chart", "graph"], "데이터/분석"],
+    [["data", "dataset", "분석", "analysis", "chart", "graph"], "데이터/분析"],
     [["log", "로그", "backup", "백업"], "시스템/로그"],
     [["config", "설정", "settings", "env"], "시스템/설정"],
   ];
@@ -78,11 +91,12 @@ export async function extractTextContent(buffer: Buffer, ext: string): Promise<s
   return null;
 }
 
-/** Gemini로 파일 분석 → {summary, tags, folder, status} */
+/** Gemini로 파일 분析 → {summary, tags, folder, status} */
 export async function analyzeWithGemini(
   fileName: string,
   ext: string,
-  content: string | null
+  content: string | null,
+  existingFolders?: string[]
 ): Promise<{ summary: string; tags: string; folder: string; status: string }> {
   if (!content) {
     return {
@@ -93,13 +107,26 @@ export async function analyzeWithGemini(
     };
   }
 
-  const prompt = `다음 파일을 분석해서 한국어로 요약, 태그, 폴더를 JSON으로 반환해줘.
+  // 기존 폴더 힌트 (최대 40개, 미분류 제외)
+  const folderHint =
+    existingFolders && existingFolders.length > 0
+      ? `\n기존 폴더 목록 (가능하면 이 중에서 선택):\n${existingFolders
+          .filter((f) => f !== "미분류")
+          .slice(0, 40)
+          .join(", ")}\n`
+      : "";
+
+  const prompt = `다음 파일을 분析해서 한국어로 요약, 태그, 폴더를 JSON으로 반환해줘.
 
 파일명: ${fileName}
 내용:
 ${content}
-
-폴더는 계층 구조로 "상위폴더/하위폴더" 형식으로 지정해줘. 예시: "개발/TypeScript", "문서/보고서", "학습/노트", "데이터/분석", "디자인", "아카이브", "미분류"
+${folderHint}
+폴더 규칙:
+- "상위/하위" 2단계 계층 구조 (예: 보안/웹보안, 개발/Python, 문서/보고서, 학습/강의자료)
+- 기존 폴더 목록과 유사한 내용이면 반드시 기존 폴더명을 그대로 사용
+- 공백, 언더스코어 없이 붙여쓰기 (예: 웹보안 O, 웹 보안 X, 웹_보안 X)
+- 한국어 우선, 단 CTF, AWS, ISMS-P, Python, SQL 등 고유명사는 영문 그대로
 
 반드시 아래 JSON 형식으로만 응답해줘 (마크다운 없이 순수 JSON):
 {"summary": "한국어 요약 2-3문장", "tags": "태그1,태그2,태그3,태그4,태그5", "folder": "상위/하위"}`;
@@ -125,7 +152,7 @@ ${content}
     return {
       summary: parsed.summary || "",
       tags: parsed.tags || "",
-      folder: parsed.folder || inferFolderFromFilename(fileName, ext),
+      folder: normalizeFolder(parsed.folder || inferFolderFromFilename(fileName, ext)),
       status: "DONE",
     };
   } catch (err) {
