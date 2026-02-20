@@ -19,6 +19,10 @@ export async function callGemini(
     if (error.message?.includes("429") || error.message?.includes("quota")) {
       throw new Error("RATE_LIMIT");
     }
+    // 503 일시 과부하도 다음 프로바이더로 fallback
+    if (error.message?.includes("503") || error.message?.includes("Service Unavailable")) {
+      throw new Error("RATE_LIMIT");
+    }
     if (error.message?.includes("404") && modelName !== "gemini-2.5-flash") {
       return callGemini(prompt, apiKey, "gemini-2.5-flash");
     }
