@@ -45,8 +45,8 @@ export async function generateEmbedding(text: string): Promise<number[]> {
   if (!apiKey) throw new Error("GEMINI_API_KEY가 설정되지 않았습니다.");
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  // 호환성이 가장 검증된 embedding-001 사용
-  const model = genAI.getGenerativeModel({ model: "embedding-001" });
+  // 모델명 앞에 'models/'를 생략하고 정확한 명칭 사용
+  const model = genAI.getGenerativeModel({ model: "text-embedding-004" });
   
   const result = await model.embedContent(text);
   return result.embedding.values;
