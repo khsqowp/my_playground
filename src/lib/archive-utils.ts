@@ -1,5 +1,11 @@
 import { createRequire } from "module";
 import { callAI } from "@/lib/ai";
+
+// PDF-parse environment polyfill
+if (typeof global.DOMMatrix === "undefined") {
+  (global as any).DOMMatrix = class DOMMatrix {};
+}
+
 const require = createRequire(import.meta.url);
 const pdf = require("pdf-parse");
 
