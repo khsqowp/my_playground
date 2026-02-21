@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const isSkipped = ["pdf", "pptx"].includes(ext);
+  const isSkipped = ["pptx"].includes(ext); // PDF는 이제 분석 대상에 포함
   const record = await prisma.archiveFile.create({
     data: {
       fileName: file.name,
@@ -145,31 +145,57 @@ export async function POST(request: NextRequest) {
   });
 
   if (!isSkipped) {
-    // 기존 폴더 목록 조회 → Gemini에게 전달하여 일관성 유지
-    const folderRows = await prisma.archiveFile.findMany({
-      where: { authorId: session.user.id },
-      select: { folder: true },
-      distinct: ["folder"],
-    });
-    const existingFolders = folderRows.map((r: { folder: string }) => r.folder);
+    try {
+      // 기존 폴더 목록 조회 → Gemini에게 전달하여 일관성 유지
+      const folderRows = await prisma.archiveFile.findMany({
+        where: { authorId: session.user.id },
+        select: { folder: true },
+        distinct: ["folder"],
+      });
+      const existingFolders = folderRows.map((r: { folder: string }) => r.folder);
 
-    const content = await extractTextContent(buffer, ext);
-    const { summary, tags, folder, status } = await analyzeWithGemini(file.name, ext, content, existingFolders);
+      // 1. 분석용 텍스트 추출 (3000자 제한)
+      const contentForAnalysis = await extractTextContent(buffer, ext, 3000);
+      const { summary, tags, folder, status } = await analyzeWithGemini(file.name, ext, contentForAnalysis, existingFolders);
 
-    await prisma.archiveFile.update({
-      where: { id: record.id },
-      data: {
-        aiSummary: summary || null,
-        aiTags: tags || null,
-        folder: folder || inferFolderFromFilename(file.name, ext),
-        aiStatus: status as any,
-      },
-    });
+      // 2. 벡터화용 전체 텍스트 추출 (제한 없음)
+      const fullContent = await extractTextContent(buffer, ext, 0);
+      
+      if (fullContent && fullContent.trim().length > 0) {
+        const { chunkText, generateEmbedding } = await import("@/lib/vector-utils");
+        const chunks = chunkText(fullContent);
 
-    return NextResponse.json(
-      { ...record, aiSummary: summary, aiTags: tags, folder, aiStatus: status },
-      { status: 201 }
-    );
+        for (const chunk of chunks) {
+          const embedding = await generateEmbedding(chunk);
+          const vectorStr = `[${embedding.join(",")}]`;
+          
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO "FileChunk" ("id", "content", "fileId", "embedding", "createdAt") 
+             VALUES ($1, $2, $3, $4::vector, NOW())`,
+            crypto.randomUUID(),
+            chunk,
+            record.id,
+            vectorStr
+          );
+        }
+      }
+
+      const finalRecord = await prisma.archiveFile.update({
+        where: { id: record.id },
+        data: {
+          aiSummary: summary || null,
+          aiTags: tags || null,
+          folder: folder || inferFolderFromFilename(file.name, ext),
+          aiStatus: status as any,
+        },
+      });
+
+      return NextResponse.json(finalRecord, { status: 201 });
+    } catch (err: any) {
+      console.error("[POST_UPLOAD_VECTORIZE_ERROR]", err);
+      // 에러가 발생해도 파일 업로드 자체는 성공한 것이므로 업로드된 레코드 반환
+      return NextResponse.json(record, { status: 201 });
+    }
   }
 
   return NextResponse.json(record, { status: 201 });

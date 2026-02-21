@@ -55,15 +55,21 @@ export function inferFolderFromFilename(fileName: string, ext: string): string {
 }
 
 /** 파일 버퍼에서 텍스트 추출 */
-export async function extractTextContent(buffer: Buffer, ext: string): Promise<string | null> {
+export async function extractTextContent(buffer: Buffer, ext: string, limit = 3000): Promise<string | null> {
   try {
     if (ext === "txt" || ext === "md") {
-      return buffer.toString("utf-8").substring(0, 3000);
+      const text = buffer.toString("utf-8");
+      return limit > 0 ? text.substring(0, limit) : text;
+    }
+    if (ext === "pdf") {
+      const pdf = (await import("pdf-parse")).default;
+      const data = await pdf(buffer);
+      return limit > 0 ? data.text.substring(0, limit) : data.text;
     }
     if (ext === "docx") {
       const mammoth = await import("mammoth");
       const result = await mammoth.extractRawText({ buffer });
-      return result.value.substring(0, 3000);
+      return limit > 0 ? result.value.substring(0, limit) : result.value;
     }
     if (ext === "xlsx") {
       const XLSX = await import("xlsx");
@@ -73,9 +79,9 @@ export async function extractTextContent(buffer: Buffer, ext: string): Promise<s
         const sheet = workbook.Sheets[sheetName];
         const csv = XLSX.utils.sheet_to_csv(sheet);
         text += `[${sheetName}]\n${csv}\n\n`;
-        if (text.length > 3000) break;
+        if (limit > 0 && text.length > limit) break;
       }
-      return text.substring(0, 3000);
+      return limit > 0 ? text.substring(0, limit) : text;
     }
     if (ext === "zip") {
       const JSZip = (await import("jszip")).default;
@@ -83,7 +89,8 @@ export async function extractTextContent(buffer: Buffer, ext: string): Promise<s
       const fileList = Object.keys(zip.files)
         .filter((k) => !zip.files[k].dir)
         .join("\n");
-      return `ZIP 파일 목록:\n${fileList}`.substring(0, 3000);
+      const text = `ZIP 파일 목록:\n${fileList}`;
+      return limit > 0 ? text.substring(0, limit) : text;
     }
   } catch (err) {
     console.error(`[EXTRACT_ERROR] ${ext}:`, err);

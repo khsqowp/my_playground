@@ -128,20 +128,60 @@ async function getKnowledgeContext() {
 }
 
 /**
+ * 벡터 DB에서 관련 컨텍스트 검색 (RAG)
+ */
+async function getVectorContext(query: string, limit = 5) {
+  try {
+    const { generateEmbedding } = await import("./vector-utils");
+    const embedding = await generateEmbedding(query);
+    const vectorStr = `[${embedding.join(",")}]`;
+
+    // pgvector 코사인 유사도 검색 (<=> 연산자 사용)
+    const results: any[] = await prisma.$queryRawUnsafe(`
+      SELECT 
+        c.content, 
+        f."fileName", 
+        f.folder,
+        (c.embedding <=> $1::vector) as distance
+      FROM "FileChunk" c
+      JOIN "ArchiveFile" f ON c."fileId" = f.id
+      ORDER BY distance ASC
+      LIMIT $2
+    `, vectorStr, limit);
+
+    if (!results || results.length === 0) return "";
+
+    let context = "\n### [아카이브 파일 검색 결과 (참조 데이터)]\n";
+    results.forEach((r, i) => {
+      context += `\n[참조 ${i + 1}: ${r.folder}/${r.fileName}]\n${r.content}\n`;
+    });
+    
+    return context;
+  } catch (err) {
+    console.error("[VECTOR_SEARCH_ERROR]", err);
+    return "";
+  }
+}
+
+/**
  * 페르소나 채팅 - 적응형 지능 및 전문 정책 적용
  */
 export async function chatWithPersona(userMessage: string): Promise<string> {
-  const knowledgeContext = await getKnowledgeContext();
+  const [knowledgeContext, vectorContext] = await Promise.all([
+    getKnowledgeContext(),
+    getVectorContext(userMessage)
+  ]);
+
   const systemPrompt = `당신은 '김한수'의 디지털 자아이자, 개인 학습 보조 및 기술 아카이브 관리 비서입니다.
 
 [역할 정의]
-- 본인의 기술 기록(활동 로그, 노트, 블로그)을 기반으로 답변하는 데이터 기반 AI입니다.
-- 추측이나 일반론보다 "기록 근거 기반 분석"을 우선합니다.
+- 본인의 기술 기록(활동 로그, 노트, 블로그) 및 **[아카이브 파일 검색 결과]**를 기반으로 답변하는 데이터 기반 AI입니다.
+- 추측이나 일반론보다 제공된 "기록 근거 기반 분석"을 우선합니다.
 - 정확성을 최우선으로 하며, 불확실한 정보는 명확히 한계를 밝힙니다.
 - 공격 기법 설명은 허용하되, 반드시 방어 전략을 병행합니다.
 
 [지식 우선순위]
-1. 내부 지식 베이스
+1. 내부 지식 베이스 및 아카이브 파일 검색 결과
 2. 내부 기록의 최신성 필터링 (과거 방식이 최신 보안 표준과 충돌 시 명시)
 3. 일반 Best Practice (내부 데이터에 없는 경우에만 제한적으로 사용)
 
@@ -163,7 +203,7 @@ export async function chatWithPersona(userMessage: string): Promise<string> {
 핵심 결론 3~5줄
 
 [기록 기반 근거]
-내부 데이터 참조 요약
+내부 데이터 및 아카이브 파일 참조 요약
 
 [기술 분석]
 원리, 구조, 동작 방식
@@ -178,6 +218,7 @@ export async function chatWithPersona(userMessage: string): Promise<string> {
 
 [지식 베이스 데이터]
 ${knowledgeContext}
+${vectorContext}
 
 사용자 질문: ${userMessage}
 AI 에이전트 답변:`;

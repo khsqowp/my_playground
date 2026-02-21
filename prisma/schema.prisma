@@ -502,11 +502,25 @@ model ArchiveFile {
 
   authorId    String
   author      User   @relation(fields: [authorId], references: [id])
+  chunks      FileChunk[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([authorId])
   @@index([authorId, folder])
+}
+
+model FileChunk {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  embedding Unsupported("vector(768)")?
+  
+  fileId    String
+  file      ArchiveFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+
+  @@index([fileId])
 }
 
 // ==================== 코드 리뷰 자동화 ====================
