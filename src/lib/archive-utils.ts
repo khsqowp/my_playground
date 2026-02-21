@@ -1,4 +1,6 @@
-import { callAI } from "@/lib/ai";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const pdf = require("pdf-parse");
 
 /**
  * 폴더명 정규화: 각 세그먼트에서 공백·언더스코어 제거
@@ -62,8 +64,6 @@ export async function extractTextContent(buffer: Buffer, ext: string, limit = 30
       return limit > 0 ? text.substring(0, limit) : text;
     }
     if (ext === "pdf") {
-      // @ts-ignore
-      const pdf = (await import("pdf-parse/lib/pdf-parse.js")).default || (await import("pdf-parse/lib/pdf-parse.js"));
       const data = await pdf(buffer);
       return limit > 0 ? data.text.substring(0, limit) : data.text;
     }

@@ -1,8 +1,10 @@
 import fs from "fs";
 import path from "path";
-// @ts-ignore
-import pdf from "pdf-parse/lib/pdf-parse.js";
+import { createRequire } from "module";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const require = createRequire(import.meta.url);
+const pdf = require("pdf-parse");
 
 /**
  * 파일에서 텍스트 추출 (MD, TXT, PDF 대응)
