@@ -62,7 +62,8 @@ export async function extractTextContent(buffer: Buffer, ext: string, limit = 30
       return limit > 0 ? text.substring(0, limit) : text;
     }
     if (ext === "pdf") {
-      const pdf = (await import("pdf-parse")).default;
+      // @ts-ignore
+      const pdf = (await import("pdf-parse/lib/pdf-parse.js")).default || (await import("pdf-parse/lib/pdf-parse.js"));
       const data = await pdf(buffer);
       return limit > 0 ? data.text.substring(0, limit) : data.text;
     }

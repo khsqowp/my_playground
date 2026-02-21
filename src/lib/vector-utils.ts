@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
-import pdf from "pdf-parse";
+// @ts-ignore
+import pdf from "pdf-parse/lib/pdf-parse.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 /**
