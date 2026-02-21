@@ -5,9 +5,9 @@ import { extractTextFromFile, chunkText, generateEmbedding } from "@/lib/vector-
 import path from "path";
 
 /**
- * 아카이브 파일 일괄 벡터화 API
+ * 아카이브 파일 일괄 벡터화 API (브라우저 접속 허용을 위해 GET 지원)
  */
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
     const session = await auth();
     if (!session) return new NextResponse("Unauthorized", { status: 401 });
