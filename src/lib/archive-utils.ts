@@ -1,4 +1,5 @@
 import { createRequire } from "module";
+import { callAI } from "@/lib/ai";
 const require = createRequire(import.meta.url);
 const pdf = require("pdf-parse");
 
