@@ -1,15 +1,8 @@
 import fs from "fs";
 import path from "path";
-import { createRequire } from "module";
+// @ts-ignore
+import pdf from "pdf-parse-fork";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-
-// PDF-parse environment polyfill
-if (typeof global.DOMMatrix === "undefined") {
-  (global as any).DOMMatrix = class DOMMatrix {};
-}
-
-const require = createRequire(import.meta.url);
-const pdf = require("pdf-parse");
 
 /**
  * 파일에서 텍스트 추출 (MD, TXT, PDF 대응)
