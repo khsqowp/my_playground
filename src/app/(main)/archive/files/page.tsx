@@ -202,6 +202,7 @@ export default function ArchiveFilesPage() {
   const [isReclassifyingAll, setIsReclassifyingAll] = useState(false);
   const [isReclassifyingFailed, setIsReclassifyingFailed] = useState(false);
   const [isReorganizing, setIsReorganizing] = useState(false);
+  const [isVectorizing, setIsVectorizing] = useState(false);
 
   const fetchFolders = useCallback(() => {
     fetch("/api/archive/files?folderList=1")
@@ -542,6 +543,39 @@ export default function ArchiveFilesPage() {
     }
   };
 
+  // ── 전체 자동 벡터화 (RAG 구축용) ───────────────────
+  const handleAutoVectorize = async () => {
+    if (isVectorizing) return;
+    if (!confirm("모든 아카이브 파일에 대해 벡터화(Embedding) 작업을 시작하시겠습니까?\n파일이 많으면 시간이 오래 걸릴 수 있으며, 완료될 때까지 브라우저를 닫지 마세요.")) return;
+
+    setIsVectorizing(true);
+    let totalProcessed = 0;
+    try {
+      let hasMore = true;
+      while (hasMore) {
+        toast.info(`벡터화 진행 중... 현재까지 ${totalProcessed}개 완료`, { id: "vectorize-toast" });
+        const res = await fetch("/api/archive/files/vectorize");
+        if (!res.ok) throw new Error("벡터화 API 요청 실패");
+        
+        const data = await res.json();
+        totalProcessed += (data.processedCount || 0);
+
+        if (data.message.includes("더 이상 처리할 파일이 없습니다") || data.processedCount === 0) {
+          hasMore = false;
+        }
+        
+        // UI 갱신 (진행 상황 확인용)
+        fetchFiles(search, selectedFolder);
+      }
+      toast.success(`총 ${totalProcessed}개 파일 벡터화 완료!`, { id: "vectorize-toast" });
+    } catch (e: any) {
+      toast.error(`벡터화 중 오류: ${e.message}`, { id: "vectorize-toast" });
+    } finally {
+      setIsVectorizing(false);
+      fetchFiles(search, selectedFolder);
+    }
+  };
+
   const folderTree = buildFolderTree(folders);
 
   return (
@@ -553,6 +587,21 @@ export default function ArchiveFilesPage() {
           파일 아카이브
         </h1>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleAutoVectorize}
+            disabled={isVectorizing}
+            className="text-primary hover:bg-primary/5"
+            title="모든 공개 파일들을 벡터 데이터베이스로 변환하여 RAG(질의응답) 기반을 구축합니다."
+          >
+            {isVectorizing ? (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="mr-2 h-3.5 w-3.5 text-primary" />
+            )}
+            일괄 벡터화 시작
+          </Button>
           <Button
             variant="outline"
             size="sm"
