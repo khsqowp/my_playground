@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import * as dotenv from "dotenv";
 import path from "path";
 
@@ -6,7 +6,7 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
 async function finalTest() {
   const apiKey = process.env.GEMINI_API_KEY;
-  const modelName = "gemini-flash-latest"; // 우리가 찾아낸 모델명
+  const modelName = "gemini-2.0-flash";
 
   console.log(`=== [${modelName}] 최종 연결 테스트 ===`);
 
@@ -16,12 +16,15 @@ async function finalTest() {
   }
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelName });
+    const ai = new GoogleGenAI({ apiKey });
 
     console.log("메시지 전송 중...");
-    const result = await model.generateContent("Hello! Reply with 'READY'");
-    const text = result.response.text();
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: "Hello! Reply with 'READY'"
+    });
+    
+    const text = response.text;
 
     console.log("---------------------------------");
     console.log("✅ 테스트 대성공!");

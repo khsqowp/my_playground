@@ -1,7 +1,9 @@
-require('dotenv').config();
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const { Client } = require('pg');
-const cron = require('node-cron');
+import 'dotenv/config';
+import { GoogleGenAI } from "@google/genai";
+import pkg from 'pg';
+const { Client } = pkg;
+import cron from 'node-cron';
+import { Client as DiscordClient, GatewayIntentBits } from 'discord.js';
 
 const log = (msg) => console.log(`[OpenClaw] ${new Date().toISOString()} - ${msg}`);
 
@@ -76,7 +78,7 @@ async function syncProjectData(client) {
                         await client.query(
                             `INSERT INTO "ProjectActivityLog" (id, platform, action, content, "externalId", "eventTime", "projectId", "createdAt", "rawPayload")
                              VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8) ON CONFLICT DO NOTHING`,
-                            ['log_' + Date.now(), 'GITHUB', 'COMMIT', `[Auto] ${c.commit.message}${fileInfo}`, c.sha, new Date(c.commit.author.date), project.id, c]
+                            ['log_' + Date.now(), 'GITHUB', 'COMMIT', `[Auto] ${c.commit.message}${fileInfo}`, c.sha, new Date(c.commit.author.date), project.id, JSON.stringify(c)]
                         );
                     }
                 }
@@ -112,13 +114,11 @@ async function sendMidnightReport(client) {
                 rawLogs += `[${new Date(l.eventTime).toLocaleString()}] [${l.platform}] [${l.action}] ${l.content}\n`;
             });
 
-            // 텍스트 내용 전송 (2000자 초과 시 잘림 방지는 추후 보완)
             await fetch(webhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    content: `🌙 **자정 원본 활동 기록 (${dateStr})**\n기록 건수: ${logsRes.rows.length}건\nAI 요약 없는 원본 로그입니다.`,
-                    files: [] // FormData 방식이 복잡하여 일단 텍스트로 시도
+                    content: `🌙 **자정 원본 활동 기록 (${dateStr})**\n기록 건수: ${logsRes.rows.length}건\nAI 요약 없는 원본 로그입니다.`
                 })
             });
         }
@@ -128,7 +128,7 @@ async function sendMidnightReport(client) {
 // -------------------------------------------------------------------------
 // 4. Discord 봇 (!ask / !quiz / !note)
 // -------------------------------------------------------------------------
-async function startDiscordBot(model) {
+async function startDiscordBot() {
     const token = process.env.DISCORD_BOT_TOKEN;
     if (!token) {
         log("DISCORD_BOT_TOKEN not set, skipping Discord bot.");
@@ -138,7 +138,6 @@ async function startDiscordBot(model) {
     const appUrl = process.env.APP_INTERNAL_URL || 'http://app:3000';
     const serviceKey = process.env.SERVICE_API_KEY || '';
 
-    const { Client: DiscordClient, GatewayIntentBits } = require('discord.js');
     const bot = new DiscordClient({
         intents: [
             GatewayIntentBits.Guilds,
@@ -184,7 +183,6 @@ async function startDiscordBot(model) {
                     return;
                 }
 
-                // Parse topic and optional count
                 const argParts = args.split(' ');
                 let topic = args;
                 let count = 5;
@@ -257,24 +255,16 @@ async function main() {
     let client;
     try { client = await connectToDB(); } catch (err) { process.exit(1); }
 
-    let model;
     if (process.env.GEMINI_API_KEY) {
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
-        log("Gemini API (gemini-flash-latest) initialized.");
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        log("Gemini API (unified SDK) initialized.");
     }
 
-    // 30분마다 데이터 수집
     cron.schedule('*/30 * * * *', () => syncProjectData(client));
-
-    // 새벽 2시 자동 태깅 (callAI 라운드로빈으로 모든 API 키 활용)
     cron.schedule('0 2 * * *', () => autoTagPosts());
-
-    // 자정 정기 보고 (원본)
     cron.schedule('0 0 * * *', () => sendMidnightReport(client));
 
-    // Discord 봇 시작
-    await startDiscordBot(model);
+    await startDiscordBot();
 
     log("OpenClaw is standby. Tasks: 30m Sync, 2am Tagging, 0am Report, Discord Bot.");
 }
