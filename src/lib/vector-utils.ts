@@ -51,5 +51,10 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     contents: [{ parts: [{ text }] }]
   });
   
-  return response.embeddings[0].values;
+  const values = response.embeddings?.[0]?.values;
+  if (!values) {
+    throw new Error("임베딩 생성 실패: API 응답에 결과값이 없습니다.");
+  }
+  
+  return values;
 }
