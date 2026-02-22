@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
 /**
  * Gemini AI 호출 (최신 2.0 Flash 모델 사용으로 속도와 지능 최적화)
@@ -7,27 +7,32 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 export async function callGemini(
   prompt: string,
   apiKey: string,
-  modelName = "gemini-2.0-flash-001"
+  modelName = "gemini-2.0-flash"
 ): Promise<string> {
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ 
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
       model: modelName,
-      generationConfig: {
-        temperature: 0.3, // 일관성 있는 전문적 답변을 위해 온도 낮춤
-        topP: 0.8,
+      contents: prompt,
+      config: {
+        temperature: 0.3,
         maxOutputTokens: 4096,
       }
     });
-    const result = await model.generateContent(prompt);
-    return result.response.text();
+    
+    return response.text || "";
   } catch (error: any) {
     console.error("[GEMINI_API_ERROR]", error.message);
     if (error.message?.includes("429") || error.message?.includes("quota") || error.message?.includes("503")) {
       throw new Error("RATE_LIMIT");
     }
-    // 하위 호환성 및 안정성을 위한 fallback
-    return callGemini(prompt, apiKey, "gemini-1.5-flash");
+    // 하위 호환성 및 안정성을 위한 fallback (최신 SDK 형식 유지)
+    const aiFallback = new GoogleGenAI({ apiKey });
+    const fallbackResponse = await aiFallback.models.generateContent({
+      model: "gemini-2.0-flash-lite", // 최신 모델 권장 사항 반영
+      contents: prompt
+    });
+    return fallbackResponse.text || "";
   }
 }
 

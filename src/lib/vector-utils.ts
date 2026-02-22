@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 // @ts-ignore
 import pdf from "pdf-parse-fork";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
 /**
  * 파일에서 텍스트 추출 (MD, TXT, PDF 대응)
@@ -44,10 +44,12 @@ export async function generateEmbedding(text: string): Promise<number[]> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY가 설정되지 않았습니다.");
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  // 모델명 앞에 'models/'를 생략하고 정확한 명칭 사용
-  const model = genAI.getGenerativeModel({ model: "text-embedding-004" });
+  const ai = new GoogleGenAI({ apiKey });
   
-  const result = await model.embedContent(text);
-  return result.embedding.values;
+  const response = await ai.models.embedContent({
+    model: "text-embedding-004",
+    contents: [{ parts: [{ text }] }]
+  });
+  
+  return response.embeddings[0].values;
 }
