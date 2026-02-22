@@ -588,15 +588,15 @@ export default function ArchiveFilesPage() {
           }
         } catch (fetchErr: any) {
           failCount++;
-          if (failCount > 5) throw new Error("연속된 요청 실패로 작업을 중단합니다.");
-          toast.warning(`연결 일시 지연... 재시도 중 (${failCount}/5)`, { id: "vectorize-progress" });
-          await new Promise(r => setTimeout(r, 5000));
+          if (failCount > 10) throw new Error("연속된 요청 실패로 작업을 중단합니다. 네트워크 환경을 확인해주세요.");
+          toast.warning(`연결 일시 지연... 재시도 중 (${failCount}/10)`, { id: "vectorize-progress" });
+          await new Promise(r => setTimeout(r, 3000)); // 3초 대기 후 재시도
           continue;
         }
         
         fetchFiles(search, selectedFolder);
-        // 짧은 대기 후 다음 조각 요청
-        await new Promise(r => setTimeout(r, 500));
+        // 매우 짧은 대기 후 다음 조각 요청 (서버 응답이 빨라졌으므로 간격 축소)
+        await new Promise(r => setTimeout(r, 1000));
       }
       toast.success(`총 ${totalFilesDone}개 파일 벡터화 완료!`, { id: "vectorize-progress" });
     } catch (e: any) {
