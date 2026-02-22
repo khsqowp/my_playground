@@ -38,18 +38,17 @@ export function chunkText(text: string, chunkSize = 1000, overlap = 200): string
 }
 
 /**
- * Gemini를 사용한 텍스트 임베딩 생성 (768차원)
+ * Gemini를 사용한 텍스트 임베딩 생성 (3072차원)
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY가 설정되지 않았습니다.");
 
-  // 가이드라인 준수: 인스턴스 생성 시 옵션 최소화
-  const ai = new GoogleGenAI({ apiKey });
+  // 진단 테스트로 검증된 v1beta 버전 및 모델명 적용
+  const ai = new GoogleGenAI({ apiKey, apiVersion: "v1beta" });
   
-  // 가장 호환성이 검증된 'embedding-001' 모델 사용
   const response = await ai.models.embedContent({
-    model: "embedding-001",
+    model: "models/gemini-embedding-001",
     contents: [{ parts: [{ text }] }]
   });
   

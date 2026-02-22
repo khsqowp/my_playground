@@ -513,7 +513,7 @@ model ArchiveFile {
 model FileChunk {
   id        String   @id @default(cuid())
   content   String   @db.Text
-  embedding Unsupported("vector(768)")?
+  embedding Unsupported("vector(3072)")?
   
   fileId    String
   file      ArchiveFile @relation(fields: [fileId], references: [id], onDelete: Cascade)

@@ -10,8 +10,8 @@ export async function callGemini(
   modelName = "gemini-2.0-flash"
 ): Promise<string> {
   try {
-    // SDK 기본값 사용
-    const ai = new GoogleGenAI({ apiKey });
+    // 임베딩 모델과의 일관성을 위해 v1beta 명시
+    const ai = new GoogleGenAI({ apiKey, apiVersion: "v1beta" });
     const response = await ai.models.generateContent({
       model: modelName,
       contents: prompt,
