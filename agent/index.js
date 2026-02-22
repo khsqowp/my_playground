@@ -256,8 +256,8 @@ async function main() {
     try { client = await connectToDB(); } catch (err) { process.exit(1); }
 
     if (process.env.GEMINI_API_KEY) {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, apiVersion: "v1beta" });
-        log("Gemini API (unified SDK v1beta) initialized.");
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        log("Gemini API (unified SDK) initialized.");
     }
 
     cron.schedule('*/30 * * * *', () => syncProjectData(client));

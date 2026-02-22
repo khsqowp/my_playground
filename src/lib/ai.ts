@@ -10,8 +10,8 @@ export async function callGemini(
   modelName = "gemini-2.0-flash"
 ): Promise<string> {
   try {
-    // 2.0 모델은 현재 v1beta에서 가장 안정적으로 지원됩니다.
-    const ai = new GoogleGenAI({ apiKey, apiVersion: "v1beta" });
+    // SDK 기본값 사용
+    const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: modelName,
       contents: prompt,
