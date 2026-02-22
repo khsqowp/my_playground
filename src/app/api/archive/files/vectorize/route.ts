@@ -12,13 +12,13 @@ export async function GET(req: NextRequest) {
     const session = await auth();
     if (!session) return new NextResponse("Unauthorized", { status: 401 });
 
-    // 1. 처리 대상 파일 조회 (실패했던 파일도 재시도 포함)
+    // 1. 처리 대상 파일 조회 (실패했거나 미지원이었던 파일도 포함)
     const pendingFiles = await prisma.archiveFile.findMany({
       where: {
         aiStatus: { in: ["PENDING", "SKIPPED", "FAILED"] },
         extension: { in: [".pdf", ".md", ".txt", "pdf", "md", "txt"] }
       },
-      take: 10
+      take: 3 // 한 번에 처리할 양을 줄여 타임아웃 방지
     });
 
     if (pendingFiles.length === 0) {

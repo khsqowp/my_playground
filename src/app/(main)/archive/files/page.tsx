@@ -203,6 +203,7 @@ export default function ArchiveFilesPage() {
   const [isReclassifyingFailed, setIsReclassifyingFailed] = useState(false);
   const [isReorganizing, setIsReorganizing] = useState(false);
   const [isVectorizing, setIsVectorizing] = useState(false);
+  const [currentFile, setCurrentFile] = useState<string | null>(null);
 
   const fetchFolders = useCallback(() => {
     fetch("/api/archive/files?folderList=1")
@@ -546,33 +547,56 @@ export default function ArchiveFilesPage() {
   // ── 전체 자동 벡터화 (RAG 구축용) ───────────────────
   const handleAutoVectorize = async () => {
     if (isVectorizing) return;
-    if (!confirm("모든 아카이브 파일에 대해 벡터화(Embedding) 작업을 시작하시겠습니까?\n파일이 많으면 시간이 오래 걸릴 수 있으며, 완료될 때까지 브라우저를 닫지 마세요.")) return;
+    if (!confirm("모든 아카이브 파일에 대해 벡터화(Embedding) 작업을 시작하시겠습니까?\n이전에 '미지원'이었던 PDF들도 다시 시도합니다.\n파일이 많으면 시간이 오래 걸릴 수 있으니 창을 닫지 마세요.")) return;
 
     setIsVectorizing(true);
     let totalProcessed = 0;
     try {
       let hasMore = true;
       while (hasMore) {
-        toast.info(`벡터화 진행 중... 현재까지 ${totalProcessed}개 완료`, { id: "vectorize-toast" });
+        toast.info(
+          `벡터화 진행 중... 현재까지 ${totalProcessed}개 완료. (진행 상황 분석 중...)`, 
+          { id: "vectorize-progress", duration: 1000000 }
+        );
+
         const res = await fetch("/api/archive/files/vectorize");
-        if (!res.ok) throw new Error("벡터화 API 요청 실패");
+        if (!res.ok) {
+          console.error("Vectorize API Error:", await res.text());
+          throw new Error(`API 응답 오류 (${res.status})`);
+        }
         
         const data = await res.json();
-        totalProcessed += (data.processedCount || 0);
+        const batchCount = data.processedCount || 0;
+        totalProcessed += batchCount;
 
-        if (data.message.includes("더 이상 처리할 파일이 없습니다") || data.processedCount === 0) {
+        if (batchCount > 0 && data.processed && data.processed.length > 0) {
+          const lastFile = data.processed[data.processed.length - 1].fileName;
+          setCurrentFile(lastFile);
+          toast.info(
+            `진행 중: ${lastFile} 포함 ${totalProcessed}개 완료`, 
+            { id: "vectorize-progress" }
+          );
+        }
+
+        if (data.message.includes("더 이상 처리할 파일이 없습니다") || batchCount === 0) {
           hasMore = false;
         }
         
         // UI 갱신 (진행 상황 확인용)
         fetchFiles(search, selectedFolder);
+        
+        // 브라우저 멈춤 방지 및 API 보호를 위한 짧은 휴식
+        await new Promise(r => setTimeout(r, 2000));
       }
-      toast.success(`총 ${totalProcessed}개 파일 벡터화 완료!`, { id: "vectorize-toast" });
+      toast.success(`총 ${totalProcessed}개 파일 벡터화 완료!`, { id: "vectorize-progress" });
     } catch (e: any) {
-      toast.error(`벡터화 중 오류: ${e.message}`, { id: "vectorize-toast" });
+      toast.error(`벡터화 중 오류: ${e.message}`, { id: "vectorize-progress" });
     } finally {
       setIsVectorizing(false);
+      setCurrentFile(null);
       fetchFiles(search, selectedFolder);
+      // 작업 완료 후 토스트 유지 후 3초 뒤 닫기
+      setTimeout(() => toast.dismiss("vectorize-progress"), 3000);
     }
   };
 
@@ -602,6 +626,11 @@ export default function ArchiveFilesPage() {
             )}
             일괄 벡터화 시작
           </Button>
+          {isVectorizing && currentFile && (
+            <span className="text-[10px] text-muted-foreground animate-pulse max-w-[120px] truncate">
+              처리 중: {currentFile}
+            </span>
+          )}
           <Button
             variant="outline"
             size="sm"
