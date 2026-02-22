@@ -1,6 +1,8 @@
 import { MetadataRoute } from 'next'
 import prisma from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // 실제 URL은 환경변수 NEXT_PUBLIC_SITE_URL에 설정되어야 합니다.
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
