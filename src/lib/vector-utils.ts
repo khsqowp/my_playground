@@ -37,18 +37,33 @@ export function chunkText(text: string, chunkSize = 1000, overlap = 200): string
   return chunks;
 }
 
+let currentKeyIndex = 0;
+
 /**
  * Gemini를 사용한 텍스트 임베딩 생성 (3072차원)
- * API 할당량 초과(429) 시 재시도 로직 포함
+ * 다중 API 키 로테이션 및 재시도 로직 포함
  */
 export async function generateEmbedding(text: string, retryCount = 0): Promise<number[]> {
-  const MAX_RETRIES = 5;
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY가 설정되지 않았습니다.");
+  const keys = [
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_API_KEY2,
+    process.env.GEMINI_API_KEY3,
+    process.env.GEMINI_API_KEY4,
+    process.env.GEMINI_API_KEY5,
+    process.env.GEMINI_API_KEY6,
+    process.env.GEMINI_API_KEY7,
+    process.env.GEMINI_API_KEY8,
+    process.env.GEMINI_API_KEY9,
+  ].filter(Boolean) as string[];
+
+  if (keys.length === 0) throw new Error("GEMINI_API_KEY가 설정되지 않았습니다.");
+
+  const MAX_RETRIES = keys.length * 2; // 모든 키를 최소 두 번씩은 시도
+  const apiKey = keys[currentKeyIndex % keys.length];
 
   try {
-    // 요청 간 최소 지연 시간 (API 숨 돌리기)
-    await new Promise(resolve => setTimeout(resolve, 800));
+    // 요청 간 최소 지연 시간
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     const ai = new GoogleGenAI({ apiKey, apiVersion: "v1beta" });
     const response = await ai.models.embedContent({
@@ -64,9 +79,13 @@ export async function generateEmbedding(text: string, retryCount = 0): Promise<n
     const status = err.status || (err.message?.includes("429") ? 429 : 0);
     
     if (status === 429 && retryCount < MAX_RETRIES) {
-      const waitTime = Math.pow(2, retryCount) * 2000; // 2s, 4s, 8s, 16s...
-      console.warn(`[GEMINI_QUOTA] 할당량 초과. ${waitTime/1000}초 후 재시도 (${retryCount + 1}/${MAX_RETRIES})`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+      // 할당량 초과 시 다음 키로 교체
+      currentKeyIndex = (currentKeyIndex + 1) % keys.length;
+      const nextWaitTime = retryCount < keys.length ? 500 : 2000; // 키 교체 시에는 짧게 대기
+      
+      console.warn(`[GEMINI_ROTATION] 키 할당량 초과. 다음 키(${currentKeyIndex + 1})로 전환하여 재시도 (${retryCount + 1}/${MAX_RETRIES})`);
+      
+      await new Promise(resolve => setTimeout(resolve, nextWaitTime));
       return generateEmbedding(text, retryCount + 1);
     }
     
