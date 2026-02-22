@@ -3,89 +3,129 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { extractTextFromFile, chunkText, generateEmbedding } from "@/lib/vector-utils";
 import path from "path";
+import crypto from "crypto";
 
 /**
- * 아카이브 파일 일괄 벡터화 API (브라우저 접속 허용을 위해 GET 지원)
+ * 아카이브 파일 조각 단위(Chunk-by-Chunk) 벡터화 API
+ * 타임아웃 방지를 위해 한 번에 최대 5개의 청크만 처리함
  */
 export async function GET(req: NextRequest) {
   try {
     const session = await auth();
     if (!session) return new NextResponse("Unauthorized", { status: 401 });
 
-    // 1. 처리 대상 파일 조회 (1개씩 처리하여 타임아웃 방지)
-    const pendingFiles = await prisma.archiveFile.findMany({
-      where: {
-        aiStatus: { in: ["PENDING", "SKIPPED", "FAILED"] },
-        extension: { in: [".pdf", ".md", ".txt", "pdf", "md", "txt"] }
-      },
-      take: 1
+    // 1. 현재 진행 중(PROCESSING)인 파일을 먼저 찾거나, 없으면 대기 중(PENDING/SKIPPED/FAILED)인 파일 하나를 가져옴
+    let file = await prisma.archiveFile.findFirst({
+      where: { aiStatus: "PROCESSING" },
+      orderBy: { updatedAt: "asc" }
     });
 
-    if (pendingFiles.length === 0) {
+    if (!file) {
+      file = await prisma.archiveFile.findFirst({
+        where: {
+          aiStatus: { in: ["PENDING", "SKIPPED", "FAILED"] },
+          extension: { in: [".pdf", ".md", ".txt", "pdf", "md", "txt"] }
+        },
+        orderBy: { createdAt: "asc" }
+      });
+    }
+
+    if (!file) {
       return NextResponse.json({ message: "더 이상 처리할 파일이 없습니다.", processedCount: 0 });
     }
 
-    const results = [];
-    const errors = [];
+    const fullPath = path.join(process.cwd(), "public", "uploads", "archive", file.storageName);
 
-    for (const file of pendingFiles) {
-      try {
-        const fullPath = path.join(process.cwd(), "public", "uploads", "archive", file.storageName);
-        
-        // 2. 기존 청크 데이터 정리 (중복 방지)
-        await prisma.fileChunk.deleteMany({ where: { fileId: file.id } });
+    // 2. 만약 조각(FileChunk) 데이터가 하나도 없다면, 먼저 텍스트를 추출하여 조각들을 생성함
+    const existingChunkCount = await prisma.fileChunk.count({ where: { fileId: file.id } });
+    
+    if (existingChunkCount === 0) {
+      const text = await extractTextFromFile(fullPath);
+      if (!text || text.trim().length === 0) {
+        await prisma.archiveFile.update({
+          where: { id: file.id },
+          data: { aiStatus: "DONE", aiSummary: "내용이 없는 파일입니다." }
+        });
+        return NextResponse.json({ message: "내용 없음 처리 완료", processedCount: 1, fileName: file.fileName });
+      }
 
-        // 3. 텍스트 추출
-        const text = await extractTextFromFile(fullPath);
-        if (!text || text.trim().length === 0) {
-          // 텍스트가 없으면 완료 처리하되 aiStatus를 DONE으로 바꿔서 다시 검색되지 않게 함
-          await prisma.archiveFile.update({
-            where: { id: file.id },
-            data: { aiStatus: "DONE", aiSummary: "내용이 없는 파일입니다." }
-          });
-          errors.push({ fileName: file.fileName, reason: "내용 없음" });
-          continue;
-        }
-
-        // 3. 청킹
-        const chunks = chunkText(text);
-
-        // 4. 각 청크 임베딩 및 저장
-        for (const content of chunks) {
-          const embedding = await generateEmbedding(content);
-          const vectorStr = `[${embedding.join(",")}]`;
-          await prisma.$executeRawUnsafe(
-            `INSERT INTO "FileChunk" ("id", "content", "fileId", "embedding", "createdAt") 
-             VALUES ($1, $2, $3, $4::vector, NOW())`,
-            crypto.randomUUID(),
+      const chunks = chunkText(text);
+      // 모든 조각을 embedding 없이 먼저 DB에 저장
+      for (const content of chunks) {
+        await prisma.fileChunk.create({
+          data: {
+            id: crypto.randomUUID(),
             content,
-            file.id,
-            vectorStr
-          );
-        }
-
-        // 5. 상태 업데이트
-        await prisma.archiveFile.update({
-          where: { id: file.id },
-          data: { aiStatus: "DONE" }
+            fileId: file.id
+          }
         });
+      }
 
-        results.push({ id: file.id, fileName: file.fileName, chunks: chunks.length });
-      } catch (err: any) {
-        console.error(`[VECTORIZE_FILE_ERROR] ${file.fileName}:`, err.message);
-        await prisma.archiveFile.update({
-          where: { id: file.id },
-          data: { aiStatus: "FAILED" }
-        });
-        errors.push({ fileName: file.fileName, reason: err.message });
+      // 상태를 PROCESSING으로 변경
+      await prisma.archiveFile.update({
+        where: { id: file.id },
+        data: { aiStatus: "PROCESSING" }
+      });
+
+      return NextResponse.json({ 
+        message: "조각 생성 완료. 벡터화 시작 중...", 
+        processedCount: 0, 
+        fileName: file.fileName,
+        totalChunks: chunks.length,
+        remainingChunks: chunks.length
+      });
+    }
+
+    // 3. 아직 임베딩이 없는 조각들을 최대 5개 가져와서 처리함
+    const pendingChunks = await prisma.fileChunk.findMany({
+      where: { 
+        fileId: file.id,
+        embedding: null as any // 런타임에서 null인 것들 검색
+      },
+      take: 5,
+      orderBy: { createdAt: "asc" }
+    });
+
+    if (pendingChunks.length > 0) {
+      for (const chunk of pendingChunks) {
+        const embedding = await generateEmbedding(chunk.content);
+        const vectorStr = `[${embedding.join(",")}]`;
+        
+        // 조각 업데이트 (임베딩 주입)
+        await prisma.$executeRawUnsafe(
+          `UPDATE "FileChunk" SET "embedding" = $1::vector WHERE "id" = $2`,
+          vectorStr,
+          chunk.id
+        );
       }
     }
 
+    // 4. 남은 조각 확인
+    const remainingCount = await prisma.fileChunk.count({
+      where: { fileId: file.id, embedding: null as any }
+    });
+
+    if (remainingCount === 0) {
+      // 모든 조각 완료 시 상태를 DONE으로 변경
+      await prisma.archiveFile.update({
+        where: { id: file.id },
+        data: { aiStatus: "DONE" }
+      });
+      
+      return NextResponse.json({ 
+        message: "파일 벡터화 완료", 
+        processedCount: 1, 
+        fileName: file.fileName,
+        isFinished: true 
+      });
+    }
+
     return NextResponse.json({ 
-      message: "벡터화 작업 결과",
-      processedCount: results.length,
-      processed: results,
-      failed: errors
+      message: "벡터화 진행 중...", 
+      processedCount: 0, 
+      fileName: file.fileName,
+      remainingChunks: remainingCount,
+      totalChunks: existingChunkCount
     });
 
   } catch (error: any) {

@@ -547,66 +547,67 @@ export default function ArchiveFilesPage() {
   // ── 전체 자동 벡터화 (RAG 구축용) ───────────────────
   const handleAutoVectorize = async () => {
     if (isVectorizing) return;
-    if (!confirm("모든 아카이브 파일에 대해 벡터화(Embedding) 작업을 시작하시겠습니까?\n이전에 '미지원'이었던 PDF들도 다시 시도합니다.\n파일이 많으면 시간이 오래 걸릴 수 있으니 창을 닫지 마세요.")) return;
+    if (!confirm("모든 아카이브 파일에 대해 벡터화(Embedding) 작업을 시작하시겠습니까?\n대용량 파일도 끊김 없이 조각 단위로 안전하게 처리합니다.\n완료될 때까지 브라우저를 닫지 마세요.")) return;
 
     setIsVectorizing(true);
-    let totalProcessed = 0;
+    let totalFilesDone = 0;
     let failCount = 0;
 
     try {
       let hasMore = true;
       while (hasMore) {
-        toast.info(
-          `벡터화 진행 중... 현재까지 ${totalProcessed}개 완료`, 
-          { id: "vectorize-progress", duration: 1000000 }
-        );
-
         try {
           const res = await fetch("/api/archive/files/vectorize");
-          
-          if (!res.ok) {
-            const errorText = await res.text();
-            throw new Error(`API 오류 (${res.status}): ${errorText.slice(0, 50)}`);
-          }
+          if (!res.ok) throw new Error(`API 오류 (${res.status})`);
           
           const data = await res.json();
-          const batchCount = data.processedCount || 0;
-          totalProcessed += batchCount;
-
-          if (batchCount > 0 && data.processed && data.processed.length > 0) {
-            const lastFile = data.processed[data.processed.length - 1].fileName;
-            setCurrentFile(lastFile);
-            toast.info(
-              `진행 중: ${lastFile} (${totalProcessed}개째)`, 
-              { id: "vectorize-progress" }
-            );
-            failCount = 0; // 성공 시 실패 카운트 초기화
+          if (data.message.includes("더 이상 처리할 파일이 없습니다")) {
+            hasMore = false;
+            break;
           }
 
-          if (data.message.includes("더 이상 처리할 파일이 없습니다") || (batchCount === 0 && data.message.includes("결과"))) {
-            hasMore = false;
+          if (data.fileName) {
+            setCurrentFile(data.fileName);
+            let progressMsg = `진행 중: ${data.fileName}`;
+            
+            if (data.totalChunks > 0) {
+              const done = data.totalChunks - (data.remainingChunks || 0);
+              const percent = Math.round((done / data.totalChunks) * 100);
+              progressMsg += ` (${percent}%)`;
+            }
+
+            if (data.isFinished || data.processedCount > 0) {
+              totalFilesDone += (data.processedCount || 0);
+            }
+
+            toast.info(
+              `${progressMsg} - 총 ${totalFilesDone}개 완료`, 
+              { id: "vectorize-progress", duration: 1000000 }
+            );
+            failCount = 0;
           }
         } catch (fetchErr: any) {
-          console.error("Batch Request Failed:", fetchErr);
           failCount++;
-          
-          if (failCount > 3) {
-            throw new Error("연속된 요청 실패로 작업을 중단합니다.");
-          }
-
-          toast.warning(
-            `요청 일시 지연 (타임아웃 등)... 5초 후 재시도합니다. (${failCount}/3)`, 
-            { id: "vectorize-progress" }
-          );
+          if (failCount > 5) throw new Error("연속된 요청 실패로 작업을 중단합니다.");
+          toast.warning(`연결 일시 지연... 재시도 중 (${failCount}/5)`, { id: "vectorize-progress" });
           await new Promise(r => setTimeout(r, 5000));
-          continue; // 중단하지 않고 다음 루프 시도
+          continue;
         }
         
         fetchFiles(search, selectedFolder);
-        await new Promise(r => setTimeout(r, 1500));
+        // 짧은 대기 후 다음 조각 요청
+        await new Promise(r => setTimeout(r, 500));
       }
-      toast.success(`총 ${totalProcessed}개 파일 벡터화 완료!`, { id: "vectorize-progress" });
+      toast.success(`총 ${totalFilesDone}개 파일 벡터화 완료!`, { id: "vectorize-progress" });
     } catch (e: any) {
+      toast.error(`벡터화 중 오류: ${e.message}`, { id: "vectorize-progress" });
+    } finally {
+      setIsVectorizing(false);
+      setCurrentFile(null);
+      fetchFiles(search, selectedFolder);
+      setTimeout(() => toast.dismiss("vectorize-progress"), 3000);
+    }
+  };
       toast.error(`벡터화 중 오류: ${e.message}`, { id: "vectorize-progress" });
     } finally {
       setIsVectorizing(false);
