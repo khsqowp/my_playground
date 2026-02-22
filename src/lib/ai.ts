@@ -10,8 +10,8 @@ export async function callGemini(
   modelName = "gemini-2.0-flash"
 ): Promise<string> {
   try {
-    // apiVersion을 'v1'으로 명시하여 404 에러 방지
-    const ai = new GoogleGenAI({ apiKey, apiVersion: "v1" });
+    // 2.0 모델은 현재 v1beta에서 가장 안정적으로 지원됩니다.
+    const ai = new GoogleGenAI({ apiKey, apiVersion: "v1beta" });
     const response = await ai.models.generateContent({
       model: modelName,
       contents: prompt,

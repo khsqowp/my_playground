@@ -44,12 +44,13 @@ export async function generateEmbedding(text: string): Promise<number[]> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY가 설정되지 않았습니다.");
 
-  // apiVersion을 'v1'으로 명시하여 text-embedding-004 모델을 정상적으로 찾도록 함
-  const ai = new GoogleGenAI({ apiKey, apiVersion: "v1" });
+  // 최신 모델은 v1beta에서 가장 잘 작동하며, 가이드라인에 따라 인스턴스 생성
+  const ai = new GoogleGenAI({ apiKey, apiVersion: "v1beta" });
   
+  // embedContent는 'contents'가 아니라 'content'를 매개변수로 받습니다.
   const response = await ai.models.embedContent({
     model: "text-embedding-004",
-    contents: [{ parts: [{ text }] }]
+    content: { parts: [{ text }] }
   });
   
   const values = response.embeddings?.[0]?.values;
