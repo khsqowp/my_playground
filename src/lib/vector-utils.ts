@@ -39,23 +39,37 @@ export function chunkText(text: string, chunkSize = 1000, overlap = 200): string
 
 /**
  * Gemini를 사용한 텍스트 임베딩 생성 (3072차원)
+ * API 할당량 초과(429) 시 재시도 로직 포함
  */
-export async function generateEmbedding(text: string): Promise<number[]> {
+export async function generateEmbedding(text: string, retryCount = 0): Promise<number[]> {
+  const MAX_RETRIES = 5;
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY가 설정되지 않았습니다.");
 
-  // 진단 테스트로 검증된 v1beta 버전 및 모델명 적용
-  const ai = new GoogleGenAI({ apiKey, apiVersion: "v1beta" });
-  
-  const response = await ai.models.embedContent({
-    model: "models/gemini-embedding-001",
-    contents: [{ parts: [{ text }] }]
-  });
-  
-  const values = response.embeddings?.[0]?.values;
-  if (!values) {
-    throw new Error("임베딩 생성 실패: API 응답에 결과값이 없습니다.");
+  try {
+    // 요청 간 최소 지연 시간 (API 숨 돌리기)
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    const ai = new GoogleGenAI({ apiKey, apiVersion: "v1beta" });
+    const response = await ai.models.embedContent({
+      model: "models/gemini-embedding-001",
+      contents: [{ parts: [{ text }] }]
+    });
+    
+    const values = response.embeddings?.[0]?.values;
+    if (!values) throw new Error("임베딩 생성 실패: API 응답에 결과값이 없습니다.");
+    
+    return values;
+  } catch (err: any) {
+    const status = err.status || (err.message?.includes("429") ? 429 : 0);
+    
+    if (status === 429 && retryCount < MAX_RETRIES) {
+      const waitTime = Math.pow(2, retryCount) * 2000; // 2s, 4s, 8s, 16s...
+      console.warn(`[GEMINI_QUOTA] 할당량 초과. ${waitTime/1000}초 후 재시도 (${retryCount + 1}/${MAX_RETRIES})`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      return generateEmbedding(text, retryCount + 1);
+    }
+    
+    throw err;
   }
-  
-  return values;
 }

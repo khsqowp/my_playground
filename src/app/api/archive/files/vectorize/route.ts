@@ -30,6 +30,9 @@ export async function GET(req: NextRequest) {
 
     for (const file of pendingFiles) {
       try {
+        // 파일 간 1초 지연 (API 할당량 보호)
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
         const fullPath = path.join(process.cwd(), "public", "uploads", "archive", file.storageName);
         
         // 2. 텍스트 추출
