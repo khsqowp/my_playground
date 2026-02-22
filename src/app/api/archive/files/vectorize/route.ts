@@ -76,15 +76,11 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 3. 아직 임베딩이 없는 조각들을 최대 5개 가져와서 처리함
-    const pendingChunks = await prisma.fileChunk.findMany({
-      where: { 
-        fileId: file.id,
-        embedding: null as any // 런타임에서 null인 것들 검색
-      },
-      take: 5,
-      orderBy: { createdAt: "asc" }
-    });
+    // 3. 아직 임베딩이 없는 조각들을 최대 5개 가져와서 처리함 (Unsupported 타입은 queryRaw 사용 필요)
+    const pendingChunks: any[] = await prisma.$queryRawUnsafe(
+      `SELECT id, content FROM "FileChunk" WHERE "fileId" = $1 AND "embedding" IS NULL ORDER BY "createdAt" ASC LIMIT 5`,
+      file.id
+    );
 
     if (pendingChunks.length > 0) {
       for (const chunk of pendingChunks) {
@@ -101,9 +97,11 @@ export async function GET(req: NextRequest) {
     }
 
     // 4. 남은 조각 확인
-    const remainingCount = await prisma.fileChunk.count({
-      where: { fileId: file.id, embedding: null as any }
-    });
+    const remainingResult: any[] = await prisma.$queryRawUnsafe(
+      `SELECT COUNT(*)::int as count FROM "FileChunk" WHERE "fileId" = $1 AND "embedding" IS NULL`,
+      file.id
+    );
+    const remainingCount = remainingResult[0]?.count || 0;
 
     if (remainingCount === 0) {
       // 모든 조각 완료 시 상태를 DONE으로 변경
