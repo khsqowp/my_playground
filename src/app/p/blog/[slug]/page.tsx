@@ -6,6 +6,31 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Calendar, Eye, Bike } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { Metadata } from "next";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const post = await prisma.post.findUnique({
+    where: { slug, visibility: "PUBLIC", published: true },
+    select: { title: true, excerpt: true },
+  });
+
+  if (!post) return {};
+
+  return {
+    title: post.title,
+    description: post.excerpt || `${post.title} - 상세 내용 보기`,
+    openGraph: {
+      title: post.title,
+      description: post.excerpt || `${post.title} - 상세 내용 보기`,
+      type: "article",
+    },
+  };
+}
 
 export default async function PublicBlogPostPage({
   params,
