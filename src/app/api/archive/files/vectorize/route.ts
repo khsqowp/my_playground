@@ -12,17 +12,17 @@ export async function GET(req: NextRequest) {
     const session = await auth();
     if (!session) return new NextResponse("Unauthorized", { status: 401 });
 
-    // 1. 처리 대상 파일 조회 (실패했거나 미지원이었던 파일도 포함)
+    // 1. 처리 대상 파일 조회 (1개씩 처리하여 타임아웃 방지)
     const pendingFiles = await prisma.archiveFile.findMany({
       where: {
         aiStatus: { in: ["PENDING", "SKIPPED", "FAILED"] },
         extension: { in: [".pdf", ".md", ".txt", "pdf", "md", "txt"] }
       },
-      take: 3 // 한 번에 처리할 양을 줄여 타임아웃 방지
+      take: 1
     });
 
     if (pendingFiles.length === 0) {
-      return NextResponse.json({ message: "더 이상 처리할 파일이 없습니다." });
+      return NextResponse.json({ message: "더 이상 처리할 파일이 없습니다.", processedCount: 0 });
     }
 
     const results = [];
@@ -30,12 +30,12 @@ export async function GET(req: NextRequest) {
 
     for (const file of pendingFiles) {
       try {
-        // 파일 간 1초 지연 (API 할당량 보호)
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
         const fullPath = path.join(process.cwd(), "public", "uploads", "archive", file.storageName);
         
-        // 2. 텍스트 추출
+        // 2. 기존 청크 데이터 정리 (중복 방지)
+        await prisma.fileChunk.deleteMany({ where: { fileId: file.id } });
+
+        // 3. 텍스트 추출
         const text = await extractTextFromFile(fullPath);
         if (!text || text.trim().length === 0) {
           // 텍스트가 없으면 완료 처리하되 aiStatus를 DONE으로 바꿔서 다시 검색되지 않게 함
