@@ -608,15 +608,6 @@ export default function ArchiveFilesPage() {
       setTimeout(() => toast.dismiss("vectorize-progress"), 3000);
     }
   };
-      toast.error(`벡터화 중 오류: ${e.message}`, { id: "vectorize-progress" });
-    } finally {
-      setIsVectorizing(false);
-      setCurrentFile(null);
-      fetchFiles(search, selectedFolder);
-      // 작업 완료 후 토스트 유지 후 3초 뒤 닫기
-      setTimeout(() => toast.dismiss("vectorize-progress"), 3000);
-    }
-  };
 
   const folderTree = buildFolderTree(folders);
 
