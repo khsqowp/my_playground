@@ -35,8 +35,8 @@ async function diagnose() {
       } else {
         console.log("이 버전의 API에서는 임베딩 모델을 찾을 수 없습니다.");
       }
-    } catch (error) {
-      console.error(`[${v}] 목록 조회 실패:`, error.message);
+    } catch (error: any) {
+      console.error(`[${v}] 목록 조회 실패:`, error.message || error);
     }
   }
 }
