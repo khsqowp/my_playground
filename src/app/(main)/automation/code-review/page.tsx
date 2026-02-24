@@ -777,7 +777,7 @@ export default function CodeReviewPage() {
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary font-mono"
               />
               <p className="text-xs text-muted-foreground">
-                비공개 레포는 서버에 GITHUB_TOKEN 환경변수가 필요합니다.
+                공개 레포는 토큰 없이 동기화할 수 있습니다.
               </p>
             </div>
           </div>

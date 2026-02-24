@@ -55,9 +55,7 @@ async function sendDiscordMessage(url: string, content: string): Promise<void> {
 // ── GitHub API 헬퍼 ─────────────────────────────────────────
 
 function githubHeaders(): Record<string, string> {
-  const h: Record<string, string> = { Accept: "application/vnd.github.v3+json" };
-  if (process.env.GITHUB_TOKEN) h["Authorization"] = `Bearer ${process.env.GITHUB_TOKEN}`;
-  return h;
+  return { Accept: "application/vnd.github.v3+json" };
 }
 
 /**
