@@ -1,7 +1,16 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import { CredentialsSignin } from "next-auth";
 import bcrypt from "bcryptjs";
 import prisma from "@/lib/prisma";
+
+class PendingApprovalError extends CredentialsSignin {
+  code = "pending_approval";
+}
+
+class RejectedAccountError extends CredentialsSignin {
+  code = "rejected_account";
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -34,8 +43,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         // 승인 대기 또는 거절 상태인 경우 로그인 차단
+        if (user.status === "PENDING") {
+          throw new PendingApprovalError();
+        }
         if (user.status !== "APPROVED") {
-          throw new Error("승인 대기 중이거나 가입이 거절된 계정입니다. 관리자에게 문의하세요.");
+          throw new RejectedAccountError();
         }
 
         return {

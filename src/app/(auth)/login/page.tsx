@@ -35,8 +35,15 @@ function LoginForm() {
       setLoading(false);
 
       if (result?.error) {
-        // Next-auth authorize에서 발생시킨 에러 메시지를 보여주기 위해 수정
-        setError(result.error || "이메일 또는 비밀번호가 올바르지 않습니다");
+        if (result.code === "pending_approval") {
+          setError("가입 승인 대기 중입니다. 관리자 승인 후 로그인할 수 있습니다.");
+        } else if (result.code === "rejected_account") {
+          setError("가입이 거절되었거나 정지된 계정입니다. 관리자에게 문의하세요.");
+        } else if (result.error === "CredentialsSignin") {
+          setError("이메일/비밀번호가 올바르지 않거나 계정이 아직 승인되지 않았습니다.");
+        } else {
+          setError(result.error || "이메일 또는 비밀번호가 올바르지 않습니다");
+        }
       } else {
         router.push(callbackUrl);
         router.refresh();
