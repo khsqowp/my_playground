@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-const publicPaths = ["/login", "/guest", "/api/auth", "/blog", "/portfolio", "/api/public", "/api/hooks"];
+const publicPaths = ["/login", "/register", "/guest", "/api/auth", "/blog", "/portfolio", "/api/public", "/api/hooks"];
 const sharePaths = ["/share/"];
+const publicExactPaths = ["/"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -16,6 +17,11 @@ export async function middleware(request: NextRequest) {
 
   // Allow public paths
   if (publicPaths.some((path) => pathname.startsWith(path))) {
+    return NextResponse.next();
+  }
+
+  // Allow exact public paths
+  if (publicExactPaths.includes(pathname)) {
     return NextResponse.next();
   }
 
