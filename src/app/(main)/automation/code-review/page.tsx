@@ -28,11 +28,13 @@ import {
   ChevronDown,
   ChevronRight,
   GitBranch,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import JSZip from "jszip";
 
 interface Commit {
   sha: string;
@@ -396,6 +398,57 @@ export default function CodeReviewPage() {
     }
   };
 
+  const handleDownloadMarkdown = async (configId: string) => {
+    const s = syncMap[configId];
+    if (!s || s.selectedShas.size === 0) return;
+
+    const selectedCommits = s.commits.filter((c) => s.selectedShas.has(c.sha));
+    const reviewedCommits = selectedCommits.filter((c) => c.reviewed && c.reviewText);
+
+    if (reviewedCommits.length === 0) {
+      toast.error("리뷰 결과가 있는 커밋만 다운로드할 수 있습니다.");
+      return;
+    }
+
+    const zip = new JSZip();
+    reviewedCommits.forEach((c) => {
+      const dateStr = format(new Date(c.date), "yyyy-MM-dd");
+      const shortSha = c.sha.substring(0, 7);
+      const safeTitle = c.message
+        .split("\n")[0]
+        .replace(/[\\/:"*?<>|]/g, "_")
+        .substring(0, 50);
+      const filename = `${dateStr}-${shortSha}-${safeTitle}.md`;
+
+      const content = `# Code Review: ${c.message.split("\n")[0]}
+
+- **SHA:** ${c.sha}
+- **Author:** ${c.author}
+- **Date:** ${format(new Date(c.date), "yyyy-MM-dd HH:mm:ss")}
+
+## Review Result
+
+${c.reviewText}
+`;
+      zip.file(filename, content);
+    });
+
+    try {
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `code-review-${configId}-${format(new Date(), "yyyyMMdd-HHmmss")}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success(`${reviewedCommits.length}개 커밋 리뷰를 ZIP 파일로 다운로드했습니다.`);
+    } catch (err: any) {
+      toast.error("다운로드 중 오류가 발생했습니다.");
+    }
+  };
+
   // ── CRUD ─────────────────────────────────────────────────────
   const openCreate = () => {
     setEditTarget(null);
@@ -678,19 +731,30 @@ export default function CodeReviewPage() {
                                 {selectedShas.size === commits.length ? "전체 해제" : "전체 선택"}
                               </Button>
                               {selectedShas.size > 0 && (
-                                <Button
-                                  size="sm"
-                                  className="h-7 text-xs"
-                                  onClick={() => handleReviewSelected(config.id)}
-                                  disabled={reviewing}
-                                >
-                                  {reviewing ? (
-                                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <Play className="mr-1 h-3 w-3" />
-                                  )}
-                                  {selectedShas.size}개 AI 분석
-                                </Button>
+                                <div className="flex items-center gap-1.5">
+                                  <Button
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    onClick={() => handleReviewSelected(config.id)}
+                                    disabled={reviewing}
+                                  >
+                                    {reviewing ? (
+                                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Play className="mr-1 h-3 w-3" />
+                                    )}
+                                    {selectedShas.size}개 AI 분석
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs border-primary/30 hover:bg-primary/5 text-primary"
+                                    onClick={() => handleDownloadMarkdown(config.id)}
+                                  >
+                                    <Download className="mr-1 h-3 w-3" />
+                                    {selectedShas.size}개 마크다운 다운로드
+                                  </Button>
+                                </div>
                               )}
                             </div>
                           </div>
