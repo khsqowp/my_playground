@@ -25,11 +25,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
+        const email = (credentials.email as string).toLowerCase().trim();
+
+        // findFirst with insensitive mode for case-insensitive email matching
+        const user = await prisma.user.findFirst({
+          where: { email: { equals: email, mode: "insensitive" } },
         });
 
         if (!user) {
+          console.log(`[AUTH] Login failed: User not found (${email})`);
           return null;
         }
 
@@ -39,14 +43,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         );
 
         if (!isPasswordValid) {
+          console.log(`[AUTH] Login failed: Invalid password for ${email}`);
           return null;
         }
 
+        console.log(`[AUTH] User found: ${email}, Status: ${user.status}`);
+
         // 승인 대기 또는 거절 상태인 경우 로그인 차단
         if (user.status === "PENDING") {
+          console.log(`[AUTH] Login blocked: Status is PENDING for ${email}`);
           throw new PendingApprovalError();
         }
         if (user.status !== "APPROVED") {
+          console.log(`[AUTH] Login blocked: Status is ${user.status} (not APPROVED) for ${email}`);
           throw new RejectedAccountError();
         }
 
@@ -84,4 +93,5 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: {
     strategy: "jwt",
   },
+  secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
 });

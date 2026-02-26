@@ -32,19 +32,21 @@ function LoginForm() {
         redirect: false,
       });
 
+      console.log("Login Result:", result);
       setLoading(false);
 
       if (result?.error) {
-        if (result.code === "pending_approval") {
+        if (result.code === "pending_approval" || result.error.includes("pending_approval")) {
           setError("가입 승인 대기 중입니다. 관리자 승인 후 로그인할 수 있습니다.");
-        } else if (result.code === "rejected_account") {
+        } else if (result.code === "rejected_account" || result.error.includes("rejected_account")) {
           setError("가입이 거절되었거나 정지된 계정입니다. 관리자에게 문의하세요.");
         } else if (result.error === "CredentialsSignin") {
           setError("이메일/비밀번호가 올바르지 않거나 계정이 아직 승인되지 않았습니다.");
         } else {
-          setError(result.error || "이메일 또는 비밀번호가 올바르지 않습니다");
+          setError(result.error || "로그인에 실패했습니다. 정보를 다시 확인해주세요.");
         }
       } else {
+        toast.success("로그인 성공!");
         router.push(callbackUrl);
         router.refresh();
       }
