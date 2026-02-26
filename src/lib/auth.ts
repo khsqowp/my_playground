@@ -27,7 +27,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const email = (credentials.email as string).toLowerCase().trim();
 
-        // findFirst with insensitive mode for case-insensitive email matching
         const user = await prisma.user.findFirst({
           where: { email: { equals: email, mode: "insensitive" } },
         });
@@ -49,7 +48,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         console.log(`[AUTH] User found: ${email}, Status: ${user.status}`);
 
-        // 승인 대기 또는 거절 상태인 경우 로그인 차단
         if (user.status === "PENDING") {
           console.log(`[AUTH] Login blocked: Status is PENDING for ${email}`);
           throw new PendingApprovalError();
@@ -95,15 +93,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
   trustHost: true,
-  cookies: {
-    sessionToken: {
-      name: `__Secure-next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: true,
-      },
-    },
-  },
 });

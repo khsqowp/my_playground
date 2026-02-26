@@ -40,9 +40,11 @@ export async function middleware(request: NextRequest) {
   }
 
   // Check for auth token using next-auth/jwt
+  // Force secureCookie: true for reverse proxy environments (HTTPS external, HTTP internal)
   const token = await getToken({
     req: request,
-    secret: process.env.NEXTAUTH_SECRET,
+    secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
+    secureCookie: true,
   });
 
   if (!token) {
