@@ -47,9 +47,9 @@ function LoginForm() {
           setError(result.error || "로그인에 실패했습니다. 정보를 다시 확인해주세요.");
         }
       } else {
-        toast.success("로그인 성공!");
-        router.push(callbackUrl);
-        router.refresh();
+        toast.success("로그인 성공! 이동 중...");
+        // Use window.location.href for a full reload to the target page to bypass middleware caching issues
+        window.location.href = callbackUrl;
       }
     } catch (err: any) {
       setLoading(false);
