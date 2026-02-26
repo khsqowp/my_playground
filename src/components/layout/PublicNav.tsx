@@ -3,16 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Moon, Sun, Menu, X } from "lucide-react";
+import { Moon, Sun, Menu, X, LayoutDashboard, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { useSession, signOut } from "next-auth/react";
 
 export function PublicNav() {
     const pathname = usePathname();
     const { theme, setTheme } = useTheme();
     const [mounted, setMounted] = useState(false);
     const [isOpen, setIsOpen] = useState(false);
+    const { data: session } = useSession();
 
     useEffect(() => {
         setMounted(true);
@@ -23,12 +25,14 @@ export function PublicNav() {
         { href: "/portfolio", label: "포트폴리오" },
     ];
 
+    if (!mounted) return null;
+
     return (
         <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <div className="container flex h-14 items-center">
                 <div className="mr-4 flex">
                     <Link href="/" className="mr-6 flex items-center space-x-2">
-                        <span className="font-bold sm:inline-block">보안으로 리다이렉트 중</span>
+                        <span className="font-bold sm:inline-block text-primary">보안으로 리다이렉트 중</span>
                     </Link>
                     <nav className="hidden md:flex items-center space-x-6 text-sm font-medium">
                         {routes.map((route) => (
@@ -56,9 +60,25 @@ export function PublicNav() {
                             <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
                             <span className="sr-only">Toggle theme</span>
                         </Button>
-                        <Button variant="outline" size="sm" asChild>
-                            <Link href="/login">로그인</Link>
-                        </Button>
+                        
+                        {session ? (
+                            <div className="flex items-center gap-2">
+                                <Button variant="outline" size="sm" asChild className="hidden sm:flex">
+                                    <Link href="/dashboard">
+                                        <LayoutDashboard className="mr-2 h-4 w-4" />
+                                        관리자 페이지
+                                    </Link>
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => signOut()} className="text-muted-foreground">
+                                    <LogOut className="mr-2 h-4 w-4" />
+                                    로그아웃
+                                </Button>
+                            </div>
+                        ) : (
+                            <Button variant="outline" size="sm" asChild>
+                                <Link href="/login">로그인</Link>
+                            </Button>
+                        )}
 
                         {/* Mobile Menu Button */}
                         <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setIsOpen(!isOpen)}>
@@ -70,7 +90,7 @@ export function PublicNav() {
 
             {/* Mobile Navigation */}
             {isOpen && (
-                <div className="md:hidden border-t p-4 space-y-4 bg-background">
+                <div className="md:hidden border-t p-4 space-y-4 bg-background animate-in slide-in-from-top-2 duration-200">
                     <nav className="flex flex-col space-y-3">
                         {routes.map((route) => (
                             <Link
@@ -85,6 +105,15 @@ export function PublicNav() {
                                 {route.label}
                             </Link>
                         ))}
+                        {session && (
+                            <Link
+                                href="/dashboard"
+                                className="text-sm font-medium text-foreground/60 hover:text-foreground"
+                                onClick={() => setIsOpen(false)}
+                            >
+                                관리자 페이지
+                            </Link>
+                        )}
                     </nav>
                 </div>
             )}
