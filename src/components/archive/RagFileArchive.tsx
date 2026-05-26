@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowUp,
+  Bot,
   Database,
   Download,
   File,
@@ -12,10 +13,13 @@ import {
   Folder,
   Image as ImageIcon,
   Loader2,
+  MessageSquare,
   RefreshCcw,
   Search,
+  Send,
   Trash2,
   Upload,
+  User,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -34,11 +38,9 @@ interface RagItem {
   supported: boolean;
 }
 
-interface PreviewState {
-  type: "text" | "image" | "pdf" | "binary" | "error" | "loading";
-  content?: string;
-  mimeType?: string;
-  size?: number;
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
 }
 
 const SUPPORTED_ACCEPT = [
@@ -89,10 +91,6 @@ function parentPath(currentPath: string) {
   return parts.join("/");
 }
 
-function joinPath(base: string, name: string) {
-  return base ? `${base}/${name}` : name;
-}
-
 export function RagFileArchive({
   title = "파일 아카이브",
   managerHref = "/archive/files/manage",
@@ -108,13 +106,16 @@ export function RagFileArchive({
   const [currentPath, setCurrentPath] = useState("");
   const [items, setItems] = useState<RagItem[]>([]);
   const [selected, setSelected] = useState<RagItem | null>(null);
-  const [preview, setPreview] = useState<PreviewState | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [reindexing, setReindexing] = useState(false);
   const [query, setQuery] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -159,24 +160,6 @@ export function RagFileArchive({
     }
   }, [currentPath, project]);
 
-  const loadPreview = useCallback(async (item: RagItem) => {
-    if (item.isDirectory) return;
-    setPreview({ type: "loading" });
-    try {
-      const params = new URLSearchParams({
-        action: "content",
-        project,
-        path: item.path,
-      });
-      const res = await fetch(`/api/rag/files?${params}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "미리보기 실패");
-      setPreview(data);
-    } catch {
-      setPreview({ type: "error" });
-    }
-  }, [project]);
-
   useEffect(() => {
     loadProjects().catch((error) => toast.error(error.message || "RAG 프로젝트를 불러오지 못했습니다."));
   }, [loadProjects]);
@@ -184,27 +167,39 @@ export function RagFileArchive({
   useEffect(() => {
     if (project) {
       setSelected(null);
-      setPreview(null);
       loadItems(project, currentPath);
     }
   }, [project, currentPath, loadItems]);
+
+  useEffect(() => {
+    setChatMessages([
+      {
+        role: "assistant",
+        content: `"${project}" 프로젝트에 색인된 문서를 기준으로 답변합니다.`,
+      },
+    ]);
+    setChatInput("");
+  }, [project]);
+
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [chatMessages, chatLoading]);
 
   const openItem = (item: RagItem) => {
     if (item.isDirectory) {
       setCurrentPath(item.path);
       setSelected(null);
-      setPreview(null);
       return;
     }
     setSelected(item);
-    loadPreview(item);
   };
 
   const handleProjectChange = (nextProject: string) => {
     setProject(nextProject);
     setCurrentPath("");
     setSelected(null);
-    setPreview(null);
   };
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -248,7 +243,6 @@ export function RagFileArchive({
 
       toast.success("파일이 삭제되었습니다.");
       setSelected(null);
-      setPreview(null);
       loadItems(project, currentPath);
     } catch (error: any) {
       toast.error(error.message || "삭제 중 오류가 발생했습니다.");
@@ -272,6 +266,40 @@ export function RagFileArchive({
       toast.error(error.message || "재색인을 시작하지 못했습니다.");
     } finally {
       setReindexing(false);
+    }
+  };
+
+  const handleChatSubmit = async () => {
+    const message = chatInput.trim();
+    if (!message || chatLoading) return;
+
+    setChatMessages((prev) => [...prev, { role: "user", content: message }]);
+    setChatInput("");
+    setChatLoading(true);
+
+    try {
+      const res = await fetch("/api/persona/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message,
+          project,
+          history: chatMessages.slice(-8),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || data.detail || "질문 처리 실패");
+      setChatMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: data.response || "답변을 생성하지 못했습니다." },
+      ]);
+    } catch (error: any) {
+      setChatMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: error.message || "질문 처리 중 오류가 발생했습니다." },
+      ]);
+    } finally {
+      setChatLoading(false);
     }
   };
 
@@ -334,7 +362,6 @@ export function RagFileArchive({
                   onClick={() => {
                     setCurrentPath(parentPath(currentPath));
                     setSelected(null);
-                    setPreview(null);
                   }}
                 >
                   <ArrowUp className="h-4 w-4" />
@@ -390,75 +417,103 @@ export function RagFileArchive({
 
         <Card className="min-h-0 overflow-hidden">
           <CardContent className="flex h-full flex-col p-0">
-            {selected ? (
-              <>
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
-                  <div className="flex min-w-0 items-center gap-3">
-                    {fileIcon(selected)}
-                    <div className="min-w-0">
-                      <h2 className="truncate text-sm font-semibold">{selected.name}</h2>
-                      <p className="text-xs text-muted-foreground">
-                        {formatBytes(selected.size)} · {new Date(selected.updatedAt).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" asChild>
-                      <a href={downloadUrl}>
-                        <Download className="mr-2 h-4 w-4" />
-                        다운로드
-                      </a>
-                    </Button>
-                    <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
-                      {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                      삭제
-                    </Button>
-                  </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10">
+                  <MessageSquare className="h-5 w-5 text-primary" />
                 </div>
-
-                <div className="min-h-0 flex-1 overflow-auto bg-muted/20 p-4">
-                  {preview?.type === "loading" && (
-                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                      미리보기 로딩 중
-                    </div>
-                  )}
-                  {preview?.type === "text" && (
-                    <pre className="min-h-full whitespace-pre-wrap rounded-md border bg-background p-4 text-xs leading-relaxed">
-                      {preview.content}
-                    </pre>
-                  )}
-                  {preview?.type === "image" && preview.content && (
-                    <div className="flex h-full items-center justify-center">
-                      <img src={preview.content} alt={selected.name} className="max-h-full max-w-full rounded-md border bg-background object-contain" />
-                    </div>
-                  )}
-                  {preview?.type === "pdf" && (
-                    <iframe title={selected.name} src={downloadUrl} className="h-full min-h-[640px] w-full rounded-md border bg-background" />
-                  )}
-                  {(preview?.type === "binary" || !preview) && (
-                    <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-                      <File className="h-12 w-12 opacity-50" />
-                      <p className="text-sm">미리보기를 지원하지 않는 파일입니다.</p>
-                    </div>
-                  )}
-                  {preview?.type === "error" && (
-                    <div className="flex h-full flex-col items-center justify-center gap-3 text-destructive">
-                      <File className="h-12 w-12 opacity-50" />
-                      <p className="text-sm">파일을 읽을 수 없습니다.</p>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground">
-                <Folder className="h-14 w-14 opacity-30" />
-                <div className="text-center">
-                  <p className="font-medium">파일을 선택하세요</p>
-                  <p className="text-sm">RAG 자료 루트의 문서를 조회, 업로드, 삭제할 수 있습니다.</p>
+                <div className="min-w-0">
+                  <h2 className="truncate text-sm font-semibold">{project} 프로젝트 채팅</h2>
+                  <p className="text-xs text-muted-foreground">
+                    현재 폴더: /{project}{currentPath ? `/${currentPath}` : ""}
+                  </p>
                 </div>
               </div>
-            )}
+              {selected && (
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-2 rounded-md bg-muted px-2 py-1 text-xs">
+                    {fileIcon(selected)}
+                    <span className="max-w-[220px] truncate">{selected.name}</span>
+                    <span className="text-muted-foreground">{formatBytes(selected.size)}</span>
+                  </div>
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={downloadUrl}>
+                      <Download className="mr-2 h-4 w-4" />
+                      다운로드
+                    </a>
+                  </Button>
+                  <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
+                    {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                    삭제
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-auto bg-muted/20 p-4">
+              <div className="space-y-4">
+                {chatMessages.map((message, index) => (
+                  <div
+                    key={`${message.role}-${index}`}
+                    className={cn("flex gap-3", message.role === "user" ? "justify-end" : "justify-start")}
+                  >
+                    {message.role === "assistant" && (
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                        <Bot className="h-4 w-4 text-primary" />
+                      </div>
+                    )}
+                    <div
+                      className={cn(
+                        "max-w-[82%] whitespace-pre-wrap rounded-md px-3 py-2 text-sm leading-relaxed",
+                        message.role === "user" ? "bg-primary text-primary-foreground" : "border bg-background"
+                      )}
+                    >
+                      {message.content}
+                    </div>
+                    {message.role === "user" && (
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                        <User className="h-4 w-4" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {chatLoading && (
+                  <div className="flex gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                      <Bot className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="flex items-center rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      답변 생성 중
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="border-t p-4">
+              <div className="flex gap-2">
+                <textarea
+                  value={chatInput}
+                  onChange={(event) => setChatInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      handleChatSubmit();
+                    }
+                  }}
+                  placeholder={`${project} 프로젝트 문서에 대해 질문`}
+                  className="min-h-10 max-h-32 min-w-0 flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  rows={1}
+                />
+                <Button onClick={handleChatSubmit} disabled={chatLoading || !chatInput.trim()} className="h-10">
+                  {chatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                답변은 현재 선택한 프로젝트의 RAG 색인 기준입니다. 새 파일은 재색인 후 반영됩니다.
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>
