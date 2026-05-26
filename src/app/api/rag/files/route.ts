@@ -302,7 +302,7 @@ export async function POST(request: NextRequest) {
     if (action === "reindex") {
       const body = await request.json().catch(() => ({}));
       const project = String(body.project || process.env.RAG_DEFAULT_PROJECT || "inbox").normalize("NFC");
-      const serviceUrl = process.env.RAG_SERVICE_URL || "http://host.docker.internal:8088";
+      const serviceUrl = process.env.RAG_SERVICE_URL || "http://rag-web:8088";
       const res = await fetch(`${serviceUrl}/api/reindex`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

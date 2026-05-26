@@ -34,11 +34,12 @@ services:
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - RAG_DATA_ROOT=/rag-data
       - RAG_DATA_ROOT_HOST=${RAG_DATA_ROOT_HOST:-/Volumes/SSD T7/AI/data}
-      - RAG_SERVICE_URL=${RAG_SERVICE_URL:-http://host.docker.internal:8088}
+      - RAG_SERVICE_URL=http://rag-web:8088
       - RAG_DEFAULT_PROJECT=${RAG_DEFAULT_PROJECT:-inbox}
       - AI_RAG_API_KEY_GEMINI=${AI_RAG_API_KEY_GEMINI:-}
     depends_on:
       - db
+      - rag-web
     networks:
       - app-network
 
@@ -78,6 +79,115 @@ services:
     networks:
       - app-network
 
+  qdrant:
+    container_name: 88motorcycle-rag-qdrant
+    image: qdrant/qdrant:v1.15.5
+    restart: always
+    volumes:
+      - rag_qdrant_data:/qdrant/storage
+    networks:
+      - app-network
+
+  rag-web:
+    container_name: 88motorcycle-rag-web
+    build:
+      context: ./rag-service
+      dockerfile: Dockerfile.rag
+    restart: always
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - COLLECTION_NAME=${COLLECTION_NAME:-inbox_docs}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - AI_RAG_API_KEY_GEMINI=${AI_RAG_API_KEY_GEMINI:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - CHUNK_SIZE=${CHUNK_SIZE:-1400}
+      - CHUNK_OVERLAP=${CHUNK_OVERLAP:-200}
+      - MIN_CHUNK_CHARS=${MIN_CHUNK_CHARS:-80}
+      - ENABLE_OCR=${ENABLE_OCR:-1}
+      - OCR_LANG=${OCR_LANG:-kor+eng}
+      - OCR_MIN_TEXT_CHARS=${OCR_MIN_TEXT_CHARS:-1}
+      - ENABLE_STT=${ENABLE_STT:-1}
+      - STT_ENABLE_KOSPACING=${STT_ENABLE_KOSPACING:-1}
+      - STT_MODELS=${STT_MODELS:-}
+      - STT_MODEL=${STT_MODEL:-small}
+      - STT_DEVICE=${STT_DEVICE:-cpu}
+      - STT_COMPUTE_TYPE=${STT_COMPUTE_TYPE:-int8}
+      - STT_LANGUAGE=${STT_LANGUAGE:-ko}
+      - STT_CHUNK_SECONDS=${STT_CHUNK_SECONDS:-180}
+      - STT_BEAM_SIZE=${STT_BEAM_SIZE:-10}
+      - STT_TEMPERATURE=${STT_TEMPERATURE:-0.0}
+      - STT_COMPRESSION_RATIO_THRESHOLD=${STT_COMPRESSION_RATIO_THRESHOLD:-2.2}
+      - STT_INITIAL_PROMPT=${STT_INITIAL_PROMPT:-다음은 한국어 음성입니다.}
+      - STT_MIN_VOTES=${STT_MIN_VOTES:-2}
+      - STT_MIN_AVG_LOGPROB=${STT_MIN_AVG_LOGPROB:--0.8}
+      - STT_MAX_NO_SPEECH_PROB=${STT_MAX_NO_SPEECH_PROB:-0.3}
+      - STT_ALIGN_TOLERANCE=${STT_ALIGN_TOLERANCE:-0.5}
+      - STT_SIMILARITY_THRESHOLD=${STT_SIMILARITY_THRESHOLD:-0.6}
+      - PROJECT_NAME=${RAG_DEFAULT_PROJECT:-inbox}
+      - DATA_ROOT=/sandbox/data
+    volumes:
+      - "${RAG_DATA_ROOT_HOST:-/Volumes/SSD T7/AI/data}:/sandbox/data:rw"
+      - ./rag-service/config:/sandbox/config:ro
+      - rag_cache:/sandbox/cache
+      - rag_workspace:/sandbox/workspace
+      - ./rag-service/scripts:/sandbox/scripts:ro
+    working_dir: /sandbox
+    depends_on:
+      - qdrant
+    command: ["uvicorn", "web:app", "--app-dir", "/sandbox/scripts", "--host", "0.0.0.0", "--port", "8088"]
+    networks:
+      - app-network
+
+  rag-watcher:
+    container_name: 88motorcycle-rag-watcher
+    build:
+      context: ./rag-service
+      dockerfile: Dockerfile.rag
+    restart: always
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - COLLECTION_NAME=${COLLECTION_NAME:-inbox_docs}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      - CHUNK_SIZE=${CHUNK_SIZE:-1400}
+      - CHUNK_OVERLAP=${CHUNK_OVERLAP:-200}
+      - MIN_CHUNK_CHARS=${MIN_CHUNK_CHARS:-80}
+      - ENABLE_OCR=${ENABLE_OCR:-1}
+      - OCR_LANG=${OCR_LANG:-kor+eng}
+      - OCR_MIN_TEXT_CHARS=${OCR_MIN_TEXT_CHARS:-1}
+      - ENABLE_STT=${ENABLE_STT:-1}
+      - STT_ENABLE_KOSPACING=${STT_ENABLE_KOSPACING:-1}
+      - STT_MODELS=${STT_MODELS:-}
+      - STT_MODEL=${STT_MODEL:-small}
+      - STT_DEVICE=${STT_DEVICE:-cpu}
+      - STT_COMPUTE_TYPE=${STT_COMPUTE_TYPE:-int8}
+      - STT_LANGUAGE=${STT_LANGUAGE:-ko}
+      - STT_CHUNK_SECONDS=${STT_CHUNK_SECONDS:-180}
+      - STT_BEAM_SIZE=${STT_BEAM_SIZE:-10}
+      - STT_TEMPERATURE=${STT_TEMPERATURE:-0.0}
+      - STT_COMPRESSION_RATIO_THRESHOLD=${STT_COMPRESSION_RATIO_THRESHOLD:-2.2}
+      - STT_INITIAL_PROMPT=${STT_INITIAL_PROMPT:-다음은 한국어 음성입니다.}
+      - STT_MIN_VOTES=${STT_MIN_VOTES:-2}
+      - STT_MIN_AVG_LOGPROB=${STT_MIN_AVG_LOGPROB:--0.8}
+      - STT_MAX_NO_SPEECH_PROB=${STT_MAX_NO_SPEECH_PROB:-0.3}
+      - STT_ALIGN_TOLERANCE=${STT_ALIGN_TOLERANCE:-0.5}
+      - STT_SIMILARITY_THRESHOLD=${STT_SIMILARITY_THRESHOLD:-0.6}
+      - PROJECT_NAME=*
+      - DATA_ROOT=/sandbox/data
+      - WATCH_INTERVAL_SECONDS=${WATCH_INTERVAL_SECONDS:-120}
+    volumes:
+      - "${RAG_DATA_ROOT_HOST:-/Volumes/SSD T7/AI/data}:/sandbox/data:ro"
+      - ./rag-service/config:/sandbox/config:ro
+      - rag_cache:/sandbox/cache
+      - rag_workspace:/sandbox/workspace
+      - ./rag-service/scripts:/sandbox/scripts:ro
+    working_dir: /sandbox
+    depends_on:
+      - qdrant
+    command: ["python", "/sandbox/scripts/watcher.py"]
+    networks:
+      - app-network
+
   openclaw:
     container_name: 88motorcycle-openclaw
     build:
@@ -114,3 +224,6 @@ networks:
 volumes:
   postgres_data:
   uploads_data:
+  rag_qdrant_data:
+  rag_cache:
+  rag_workspace:

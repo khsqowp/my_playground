@@ -44,7 +44,7 @@ jobs:
             "DISCORD_BOT_TOKEN=${{ secrets.DISCORD_BOT_TOKEN }}",
             "GITHUB_TOKEN=${{ github.token }}",
             "RAG_DATA_ROOT_HOST=${{ secrets.RAG_DATA_ROOT_HOST }}",
-            "RAG_SERVICE_URL=${{ secrets.RAG_SERVICE_URL }}",
+            "RAG_SERVICE_URL=http://rag-web:8088",
             "RAG_DEFAULT_PROJECT=${{ secrets.RAG_DEFAULT_PROJECT }}",
             "AI_RAG_API_KEY_GEMINI=${{ secrets.AI_RAG_API_KEY_GEMINI || secrets.GEMINI_API_KEY }}",
             "UPLOAD_MAX_SIZE_MB=100",
