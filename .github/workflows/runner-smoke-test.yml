@@ -1,0 +1,15 @@
+name: Runner Smoke Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: [self-hosted, Windows, X64]
+    steps:
+      - name: Print runner status
+        shell: powershell
+        run: |
+          Write-Host "Runner smoke test started."
+          whoami
+          docker --version
