@@ -3,6 +3,7 @@ name: Deploy to Windows Server
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -41,7 +42,10 @@ jobs:
             "ADMIN_NAME=${{ secrets.ADMIN_NAME }}",
             "SERVICE_API_KEY=${{ secrets.SERVICE_API_KEY }}",
             "DISCORD_BOT_TOKEN=${{ secrets.DISCORD_BOT_TOKEN }}",
-            "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN_PAT || github.token }}",
+            "GITHUB_TOKEN=${{ secrets.TOKEN_GIT || secrets.GITHUB_TOKEN_PAT || github.token }}",
+            "RAG_DATA_ROOT_HOST=${{ secrets.RAG_DATA_ROOT_HOST || vars.RAG_DATA_ROOT_HOST }}",
+            "RAG_SERVICE_URL=${{ secrets.RAG_SERVICE_URL || vars.RAG_SERVICE_URL }}",
+            "RAG_DEFAULT_PROJECT=${{ secrets.RAG_DEFAULT_PROJECT || vars.RAG_DEFAULT_PROJECT }}",
             "UPLOAD_MAX_SIZE_MB=100",
             "UPLOAD_DIR=./public/uploads"
           )
@@ -52,18 +56,37 @@ jobs:
 
           # 재빌드 및 재시작
           docker-compose down
-          docker-compose up -d --build
+          docker-compose up -d --build --force-recreate
           
-          Write-Host "2. Waiting for database (30s)..."
-          Start-Sleep -Seconds 30
+          Write-Host "2. Waiting for database readiness..."
+          $dbReady = $false
+          for ($i = 0; $i -lt 12; $i++) {
+            docker exec 88motorcycle-db pg_isready -U postgres
+            if ($LASTEXITCODE -eq 0) {
+              $dbReady = $true
+              break
+            }
+            Start-Sleep -Seconds 5
+          }
+
+          if (-not $dbReady) {
+            throw "Database did not become ready within 60 seconds."
+          }
           
-          Write-Host "3. Finalizing Database (Sync & Seed)..."
+          Write-Host "3. Ensuring pgvector extension exists..."
+          docker exec 88motorcycle-db psql -U postgres -d 88motorcycle -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+          Write-Host "4. Finalizing Database (Sync & Seed)..."
           # Prisma 6 버전을 강제하여 v7과의 충돌을 완전히 차단
           docker exec 88motorcycle-web npx prisma@6 db push --accept-data-loss
           
           # 이미 구동된 앱 컨테이너에서 비밀번호 업데이트 시도
           docker exec -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" -e ADMIN_NAME="${{ secrets.ADMIN_NAME }}" `
             88motorcycle-web node prisma/seed-simple.js
+
+          Write-Host "5. Restarting application containers to ensure latest code and schema are active..."
+          docker restart 88motorcycle-web
+          docker restart 88motorcycle-openclaw
           
           Write-Host "Deployment Complete."
           docker ps -a
