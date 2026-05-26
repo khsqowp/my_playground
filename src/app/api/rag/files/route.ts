@@ -72,11 +72,16 @@ async function requireUser(request: NextRequest) {
 function listProjects() {
   const root = getDataRoot();
   if (!fs.existsSync(root)) return [];
-  return fs
-    .readdirSync(root, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
-    .map((entry) => entry.name)
-    .sort((a, b) => a.localeCompare(b));
+  try {
+    return fs
+      .readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .map((entry) => entry.name)
+      .sort((a, b) => a.localeCompare(b));
+  } catch (error) {
+    console.error("[RAG_LIST_PROJECTS_ERROR]", error);
+    return [];
+  }
 }
 
 function summarizeProject(project: string) {
@@ -89,15 +94,36 @@ function summarizeProject(project: string) {
     totalSize: 0,
     updatedAt: null as string | null,
     extensions: {} as Record<string, number>,
+    warnings: [] as Array<{ path: string; error: string }>,
   };
 
   if (!fs.existsSync(projectRoot)) return summary;
 
   const walk = (dir: string) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (error: any) {
+      summary.warnings.push({
+        path: toProjectRelative(projectRoot, dir) || ".",
+        error: error.message || "Failed to read directory",
+      });
+      return;
+    }
+
+    for (const entry of entries) {
       if (entry.name.startsWith(".")) continue;
       const absolute = path.join(dir, entry.name);
-      const stats = fs.statSync(absolute);
+      let stats: fs.Stats;
+      try {
+        stats = fs.statSync(absolute);
+      } catch (error: any) {
+        summary.warnings.push({
+          path: toProjectRelative(projectRoot, absolute),
+          error: error.message || "Failed to read file stats",
+        });
+        continue;
+      }
       const mtime = stats.mtime.toISOString();
       if (!summary.updatedAt || mtime > summary.updatedAt) {
         summary.updatedAt = mtime;
