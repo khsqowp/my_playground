@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { removeRagDocument, syncBlogPostToRag } from "@/lib/rag-sync";
 import { PostUpdateInput } from "@/types/blog";
 
 // Helper function to generate slug from title
@@ -119,6 +120,7 @@ export async function PUT(
       where: { id },
       select: {
         authorId: true,
+        slug: true,
         author: {
           select: {
             role: true,
@@ -223,6 +225,11 @@ export async function PUT(
       },
     });
 
+    if (existingPost.slug !== post.slug) {
+      await removeRagDocument("blog", existingPost.slug);
+    }
+    await syncBlogPostToRag(post);
+
     return NextResponse.json(post);
   } catch (error) {
     console.error("Error updating post:", error);
@@ -249,6 +256,7 @@ export async function DELETE(
       where: { id },
       select: {
         authorId: true,
+        slug: true,
         author: {
           select: {
             role: true,
@@ -274,6 +282,8 @@ export async function DELETE(
     await prisma.post.delete({
       where: { id },
     });
+
+    await removeRagDocument("blog", existingPost.slug);
 
     return NextResponse.json({ success: true });
   } catch (error) {

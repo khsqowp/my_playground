@@ -3,7 +3,7 @@ import Link from "next/link";
 import prisma from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { StickyNote, Database, Search, Upload, Folder } from "lucide-react";
+import { StickyNote, Database, Search, Folder } from "lucide-react";
 
 export default async function DataPage() {
   const [memoCount, collectionCount, recordCount] = await Promise.all([
@@ -28,14 +28,14 @@ export default async function DataPage() {
             </CardContent>
           </Card>
         </Link>
-        <Link href="/data/files">
+        <Link href="/archive/files">
           <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
             <CardHeader className="flex flex-row items-center gap-2 pb-2">
               <Folder className="h-5 w-5 text-yellow-500" />
-              <CardTitle className="text-base">파일 탐색기 (Files)</CardTitle>
+              <CardTitle className="text-base">RAG 파일 아카이브</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">프로젝트 파일 열람 및 다운로드</p>
+              <p className="text-sm text-muted-foreground">아카이브에서 통합 관리</p>
             </CardContent>
           </Card>
         </Link>

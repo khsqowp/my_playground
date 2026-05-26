@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { syncBlogPostToRag } from "@/lib/rag-sync";
 import { PostCreateInput } from "@/types/blog";
 
 // Helper function to generate slug from title
@@ -251,6 +252,8 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    await syncBlogPostToRag(post);
 
     return NextResponse.json(post, { status: 201 });
   } catch (error) {

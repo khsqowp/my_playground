@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Bot, Send, User, Sparkles } from "lucide-react";
+import { Bot, Folder, Send, User, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Message {
@@ -19,6 +19,8 @@ export default function PersonaPage() {
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [projects, setProjects] = useState<string[]>([]);
+  const [project, setProject] = useState("inbox");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -26,6 +28,30 @@ export default function PersonaPage() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    fetch("/api/rag/files?action=projects")
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "프로젝트 목록 조회 실패");
+        setProjects(data.projects || []);
+        const defaultProject = data.defaultProject || "inbox";
+        setProject((prev) => (data.projects || []).includes(prev) ? prev : defaultProject);
+      })
+      .catch(() => {
+        setProjects(["inbox"]);
+      });
+  }, []);
+
+  const handleProjectChange = (nextProject: string) => {
+    setProject(nextProject);
+    setMessages([
+      {
+        role: "assistant",
+        content: `"${nextProject}" 프로젝트 문서를 기준으로 답변합니다.`,
+      },
+    ]);
+  };
 
   const onSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -38,7 +64,12 @@ export default function PersonaPage() {
     try {
       const res = await fetch("/api/persona/chat", {
         method: "POST",
-        body: JSON.stringify({ message: userMsg }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userMsg,
+          project,
+          history: messages.slice(-6),
+        }),
       });
 
       if (!res.ok) throw new Error("대화 중 오류가 발생했습니다.");
@@ -54,9 +85,25 @@ export default function PersonaPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] max-w-4xl mx-auto">
-      <div className="flex items-center gap-2 mb-4">
-        <Sparkles className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold">페르소나 AI 채팅</h1>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-6 w-6 text-primary" />
+          <h1 className="text-2xl font-bold">페르소나 AI 채팅</h1>
+        </div>
+        <label className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm">
+          <Folder className="h-4 w-4 text-muted-foreground" />
+          <select
+            value={project}
+            onChange={(event) => handleProjectChange(event.target.value)}
+            className="bg-transparent outline-none"
+          >
+            {projects.length === 0 ? (
+              <option value={project}>{project}</option>
+            ) : (
+              projects.map((name) => <option key={name} value={name}>{name}</option>)
+            )}
+          </select>
+        </label>
       </div>
 
       <Card className="flex-1 flex flex-col p-4 mb-4 overflow-hidden bg-background/50 backdrop-blur">

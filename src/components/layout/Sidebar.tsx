@@ -58,6 +58,7 @@ const navItems: NavItem[] = [
     icon: BookOpen,
     children: [
       { title: "파일 아카이브", href: "/archive/files", icon: FileArchive },
+      { title: "파일 전체 관리", href: "/archive/files/manage", icon: Settings },
     ],
   },
   { title: "데이터", href: "/data", icon: Database },

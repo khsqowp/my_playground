@@ -9,6 +9,7 @@ services:
       - "3000:3000"
     volumes:
       - uploads_data:/app/public/uploads
+      - "${RAG_DATA_ROOT_HOST:-/Volumes/SSD T7/AI/data}:/rag-data:rw"
     env_file:
       - .env
     environment:
@@ -29,8 +30,12 @@ services:
       - GEMINI_API_KEY7=${GEMINI_API_KEY7}
       - GEMINI_API_KEY8=${GEMINI_API_KEY8}
       - GEMINI_API_KEY9=${GEMINI_API_KEY9}
-      - SERVICE_API_KEY=${SERVICE_API_KEY}
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - SERVICE_API_KEY=${SERVICE_API_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - RAG_DATA_ROOT=/rag-data
+      - RAG_DATA_ROOT_HOST=${RAG_DATA_ROOT_HOST:-/Volumes/SSD T7/AI/data}
+      - RAG_SERVICE_URL=${RAG_SERVICE_URL:-http://host.docker.internal:8088}
+      - RAG_DEFAULT_PROJECT=${RAG_DEFAULT_PROJECT:-inbox}
     depends_on:
       - db
     networks:
@@ -59,6 +64,8 @@ services:
   pgadmin:
     container_name: 88motorcycle-pgadmin
     image: dpage/pgadmin4
+    profiles:
+      - tools
     restart: always
     environment:
       - PGADMIN_DEFAULT_EMAIL=admin@admin.com
@@ -88,9 +95,9 @@ services:
       - GEMINI_API_KEY7=${GEMINI_API_KEY7}
       - GEMINI_API_KEY8=${GEMINI_API_KEY8}
       - GEMINI_API_KEY9=${GEMINI_API_KEY9}
-      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
       - APP_INTERNAL_URL=http://app:3000
-      - SERVICE_API_KEY=${SERVICE_API_KEY}
+      - SERVICE_API_KEY=${SERVICE_API_KEY:-}
     depends_on:
       - db
       - app

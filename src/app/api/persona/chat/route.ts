@@ -8,6 +8,50 @@ interface HistoryMessage {
   content: string;
 }
 
+function ragServiceUrl() {
+  return (process.env.RAG_SERVICE_URL || "").replace(/\/$/, "");
+}
+
+async function askProjectRag(message: string, project: string, history?: HistoryMessage[]) {
+  const baseUrl = ragServiceUrl();
+  if (!baseUrl) {
+    return chatWithPersona(message);
+  }
+
+  const recentHistory = (history ?? [])
+    .slice(-6)
+    .map((m) => `${m.role === "user" ? "사용자" : "AI"}: ${m.content}`)
+    .join("\n");
+
+  const query = recentHistory
+    ? `[이전 대화]\n${recentHistory}\n\n[현재 질문]\n${message}`
+    : message;
+
+  const res = await fetch(`${baseUrl}/api/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      project,
+      query,
+      limit: 8,
+      show_context: false,
+      web_search: false,
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (res.status === 404) {
+    return `"${project}" 프로젝트에서 질문과 관련된 색인 문서를 찾지 못했습니다. 파일을 업로드했거나 블로그/포트폴리오를 저장했다면 RAG 재색인을 먼저 실행해 주세요.`;
+  }
+
+  if (!res.ok) {
+    throw new Error(data.detail || data.error || "RAG 서비스 응답 오류");
+  }
+
+  return data.answer || "답변을 생성하지 못했습니다.";
+}
+
 export async function POST(req: NextRequest) {
   try {
     // Service-key auth (Discord bot) bypasses session auth
@@ -18,7 +62,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const { message, pageContext, pagePath, history } = await req.json();
+    const { message, project, pageContext, pagePath, history } = await req.json();
     if (!message) {
       return new NextResponse("Message is required", { status: 400 });
     }
@@ -86,8 +130,8 @@ ${historyText || "대화 기록 없음"}
 
       response = await callAI(prompt);
     } else {
-      // 페이지 컨텍스트가 없으면 Discord bot 등 외부 요청 — 페르소나 모드
-      response = await chatWithPersona(message);
+      const selectedProject = String(project || process.env.RAG_DEFAULT_PROJECT || "inbox");
+      response = await askProjectRag(message, selectedProject, history as HistoryMessage[] | undefined);
     }
 
     return NextResponse.json({ response });
