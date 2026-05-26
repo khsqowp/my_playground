@@ -46,6 +46,7 @@ jobs:
             "RAG_DATA_ROOT_HOST=${{ secrets.RAG_DATA_ROOT_HOST }}",
             "RAG_SERVICE_URL=${{ secrets.RAG_SERVICE_URL }}",
             "RAG_DEFAULT_PROJECT=${{ secrets.RAG_DEFAULT_PROJECT }}",
+            "AI_RAG_API_KEY_GEMINI=${{ secrets.AI_RAG_API_KEY_GEMINI }}",
             "UPLOAD_MAX_SIZE_MB=100",
             "UPLOAD_DIR=./public/uploads"
           )

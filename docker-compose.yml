@@ -36,6 +36,7 @@ services:
       - RAG_DATA_ROOT_HOST=${RAG_DATA_ROOT_HOST:-/Volumes/SSD T7/AI/data}
       - RAG_SERVICE_URL=${RAG_SERVICE_URL:-http://host.docker.internal:8088}
       - RAG_DEFAULT_PROJECT=${RAG_DEFAULT_PROJECT:-inbox}
+      - AI_RAG_API_KEY_GEMINI=${AI_RAG_API_KEY_GEMINI:-}
     depends_on:
       - db
     networks:

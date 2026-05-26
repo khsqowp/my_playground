@@ -12,6 +12,10 @@ function ragServiceUrl() {
   return (process.env.RAG_SERVICE_URL || "").replace(/\/$/, "");
 }
 
+function ragGeminiApiKey() {
+  return (process.env.AI_RAG_API_KEY_GEMINI || "").trim();
+}
+
 async function askProjectRag(message: string, project: string, history?: HistoryMessage[]) {
   const baseUrl = ragServiceUrl();
   if (!baseUrl) {
@@ -27,12 +31,21 @@ async function askProjectRag(message: string, project: string, history?: History
     ? `[이전 대화]\n${recentHistory}\n\n[현재 질문]\n${message}`
     : message;
 
+  const apiKey = ragGeminiApiKey();
+  if (!apiKey) {
+    throw new Error("AI_RAG_API_KEY_GEMINI이 설정되지 않았습니다.");
+  }
+
   const res = await fetch(`${baseUrl}/api/ask`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-gemini-api-key": apiKey,
+    },
     body: JSON.stringify({
       project,
       query,
+      api_key: apiKey,
       limit: 8,
       show_context: false,
       web_search: false,
