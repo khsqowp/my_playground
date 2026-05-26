@@ -301,7 +301,7 @@ export async function POST(request: NextRequest) {
   try {
     if (action === "reindex") {
       const body = await request.json().catch(() => ({}));
-      const project = body.project || process.env.RAG_DEFAULT_PROJECT || "inbox";
+      const project = String(body.project || process.env.RAG_DEFAULT_PROJECT || "inbox").normalize("NFC");
       const serviceUrl = process.env.RAG_SERVICE_URL || "http://host.docker.internal:8088";
       const res = await fetch(`${serviceUrl}/api/reindex`, {
         method: "POST",
@@ -309,6 +309,16 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({ project, recreate: body.recreate ?? true }),
       });
       const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return NextResponse.json(
+          {
+            error: data.detail || data.error || "RAG 재색인 요청 실패",
+            project,
+            serviceStatus: res.status,
+          },
+          { status: res.status }
+        );
+      }
       return NextResponse.json(data, { status: res.status });
     }
 

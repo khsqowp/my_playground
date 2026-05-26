@@ -13,7 +13,7 @@ function ragServiceUrl() {
 }
 
 function ragGeminiApiKey() {
-  return (process.env.AI_RAG_API_KEY_GEMINI || "").trim();
+  return (process.env.AI_RAG_API_KEY_GEMINI || process.env.GEMINI_API_KEY || "").trim();
 }
 
 async function askProjectRag(message: string, project: string, history?: HistoryMessage[]) {
@@ -150,6 +150,9 @@ ${historyText || "대화 기록 없음"}
     return NextResponse.json({ response });
   } catch (error: any) {
     console.error("[PERSONA_CHAT_ERROR]", error);
-    return new NextResponse(error.message || "Internal Server Error", { status: 500 });
+    return NextResponse.json(
+      { error: error.message || "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
