@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowUp,
-  Bot,
   Database,
   Download,
   File,
@@ -13,13 +12,10 @@ import {
   Folder,
   Image as ImageIcon,
   Loader2,
-  MessageSquare,
   RefreshCcw,
   Search,
-  Send,
   Trash2,
   Upload,
-  User,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -36,11 +32,6 @@ interface RagItem {
   updatedAt: string;
   extension: string;
   supported: boolean;
-}
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
 }
 
 interface CacheStatus {
@@ -123,11 +114,7 @@ export function RagFileArchive({
   const [cacheLoading, setCacheLoading] = useState(false);
   const [cacheClearing, setCacheClearing] = useState(false);
   const [query, setQuery] = useState("");
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [chatLoading, setChatLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -202,22 +189,6 @@ export function RagFileArchive({
       loadCacheStatus(project);
     }
   }, [project, currentPath, loadItems, loadCacheStatus]);
-
-  useEffect(() => {
-    setChatMessages([
-      {
-        role: "assistant",
-        content: `"${project}" 프로젝트에 색인된 문서를 기준으로 답변합니다.`,
-      },
-    ]);
-    setChatInput("");
-  }, [project]);
-
-  useEffect(() => {
-    if (chatScrollRef.current) {
-      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
-    }
-  }, [chatMessages, chatLoading]);
 
   const openItem = (item: RagItem) => {
     if (item.isDirectory) {
@@ -319,40 +290,6 @@ export function RagFileArchive({
       toast.error(error.message || "캐시 삭제 중 오류가 발생했습니다.");
     } finally {
       setCacheClearing(false);
-    }
-  };
-
-  const handleChatSubmit = async () => {
-    const message = chatInput.trim();
-    if (!message || chatLoading) return;
-
-    setChatMessages((prev) => [...prev, { role: "user", content: message }]);
-    setChatInput("");
-    setChatLoading(true);
-
-    try {
-      const res = await fetch("/api/persona/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message,
-          project,
-          history: chatMessages.slice(-8),
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || data.detail || "질문 처리 실패");
-      setChatMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: data.response || "답변을 생성하지 못했습니다." },
-      ]);
-    } catch (error: any) {
-      setChatMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: error.message || "질문 처리 중 오류가 발생했습니다." },
-      ]);
-    } finally {
-      setChatLoading(false);
     }
   };
 
@@ -488,10 +425,10 @@ export function RagFileArchive({
             <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                  <MessageSquare className="h-5 w-5 text-primary" />
+                  <FileArchive className="h-5 w-5 text-primary" />
                 </div>
                 <div className="min-w-0">
-                  <h2 className="truncate text-sm font-semibold">{project} 프로젝트 채팅</h2>
+                  <h2 className="truncate text-sm font-semibold">{project} 프로젝트 파일</h2>
                   <p className="text-xs text-muted-foreground">
                     현재 폴더: /{project}{currentPath ? `/${currentPath}` : ""}
                   </p>
@@ -518,69 +455,48 @@ export function RagFileArchive({
               )}
             </div>
 
-            <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-auto bg-muted/20 p-4">
-              <div className="space-y-4">
-                {chatMessages.map((message, index) => (
-                  <div
-                    key={`${message.role}-${index}`}
-                    className={cn("flex gap-3", message.role === "user" ? "justify-end" : "justify-start")}
-                  >
-                    {message.role === "assistant" && (
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                        <Bot className="h-4 w-4 text-primary" />
-                      </div>
-                    )}
-                    <div
-                      className={cn(
-                        "max-w-[82%] whitespace-pre-wrap rounded-md px-3 py-2 text-sm leading-relaxed",
-                        message.role === "user" ? "bg-primary text-primary-foreground" : "border bg-background"
-                      )}
-                    >
-                      {message.content}
+            <div className="min-h-0 flex-1 overflow-auto bg-muted/20 p-4">
+              {selected ? (
+                <div className="space-y-4 rounded-md border bg-background p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-md bg-muted">
+                      {fileIcon(selected)}
                     </div>
-                    {message.role === "user" && (
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
-                        <User className="h-4 w-4" />
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {chatLoading && (
-                  <div className="flex gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                      <Bot className="h-4 w-4 text-primary" />
-                    </div>
-                    <div className="flex items-center rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      답변 생성 중
+                    <div className="min-w-0">
+                      <h3 className="truncate font-semibold">{selected.name}</h3>
+                      <p className="text-sm text-muted-foreground">{formatBytes(selected.size)}</p>
                     </div>
                   </div>
-                )}
-              </div>
-            </div>
-
-            <div className="border-t p-4">
-              <div className="flex gap-2">
-                <textarea
-                  value={chatInput}
-                  onChange={(event) => setChatInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      handleChatSubmit();
-                    }
-                  }}
-                  placeholder={`${project} 프로젝트 문서에 대해 질문`}
-                  className="min-h-10 max-h-32 min-w-0 flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  rows={1}
-                />
-                <Button onClick={handleChatSubmit} disabled={chatLoading || !chatInput.trim()} className="h-10">
-                  {chatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                </Button>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                답변은 현재 선택한 프로젝트의 RAG 색인 기준입니다. 새 파일은 재색인 후 반영됩니다.
-              </p>
+                  <div className="grid gap-3 text-sm md:grid-cols-2">
+                    <div className="rounded-md border p-3">
+                      <div className="text-xs text-muted-foreground">경로</div>
+                      <div className="mt-1 break-all font-mono text-xs">/{project}/{selected.path}</div>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <div className="text-xs text-muted-foreground">수정 시각</div>
+                      <div className="mt-1">{new Date(selected.updatedAt).toLocaleString()}</div>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <div className="text-xs text-muted-foreground">확장자</div>
+                      <div className="mt-1">{selected.extension || "없음"}</div>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <div className="text-xs text-muted-foreground">색인 지원</div>
+                      <div className="mt-1">{selected.supported ? "지원됨" : "미지원"}</div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex h-full min-h-[360px] items-center justify-center rounded-md border border-dashed bg-background/60 p-8 text-center">
+                  <div>
+                    <FileArchive className="mx-auto h-10 w-10 text-muted-foreground/60" />
+                    <h3 className="mt-3 font-semibold">파일을 선택하세요</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      왼쪽 목록에서 파일을 선택하면 경로, 크기, 색인 지원 여부를 확인할 수 있습니다.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

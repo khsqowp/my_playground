@@ -45,7 +45,6 @@ interface Permissions {
   data: Permission;
   automation: Permission;
   activity: Permission;
-  persona: Permission;
   tools: Permission;
   links: Permission;
 }
@@ -70,7 +69,6 @@ const PERMISSION_LABELS: Record<keyof Permissions, string> = {
   data: "데이터",
   automation: "자동화",
   activity: "활동로그",
-  persona: "페르소나 AI",
   tools: "도구",
   links: "링크"
 };
@@ -83,7 +81,6 @@ const DEFAULT_PERMISSIONS: Permissions = {
   data: { view: false, use: false },
   automation: { view: false, use: false },
   activity: { view: false, use: false },
-  persona: { view: false, use: false },
   tools: { view: false, use: false },
   links: { view: false, use: false },
 };

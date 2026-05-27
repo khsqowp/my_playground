@@ -32,7 +32,6 @@ export async function POST(req: Request) {
       data: { view: false, use: false },
       automation: { view: false, use: false },
       activity: { view: false, use: false },
-      persona: { view: false, use: false },
       tools: { view: false, use: false },
       links: { view: false, use: false },
     };
