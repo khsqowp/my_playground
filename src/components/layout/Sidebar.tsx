@@ -19,6 +19,7 @@ import {
   Activity,
   ShieldAlert,
   FileArchive,
+  Globe2,
   GitPullRequest,
   Webhook,
   Sparkles,
@@ -52,15 +53,8 @@ const navItems: NavItem[] = [
   { title: "대시보드", href: "/dashboard", icon: LayoutDashboard },
   { title: "블로그", href: "/manage/blog", icon: PenSquare },
   { title: "포트폴리오", href: "/manage/portfolio", icon: BookOpen },
-  {
-    title: "아카이브",
-    href: "/archive",
-    icon: BookOpen,
-    children: [
-      { title: "파일 아카이브", href: "/archive/files", icon: FileArchive },
-      { title: "파일 전체 관리", href: "/archive/files/manage", icon: Settings },
-    ],
-  },
+  { title: "RAG 프로젝트 관리", href: "/archive/files/manage", icon: FileArchive },
+  { title: "사이트 아카이브", href: "/archive/sites", icon: Globe2 },
   { title: "데이터", href: "/data", icon: Database },
   { title: "사용자 관리", href: "/manage/users", icon: Users },
   {
@@ -74,7 +68,6 @@ const navItems: NavItem[] = [
       { title: "코드 리뷰", href: "/automation/code-review", icon: GitPullRequest },
     ],
   },
-  { title: "페르소나 AI", href: "/persona", icon: Bot },
   {
     title: "도구",
     href: "/tools",

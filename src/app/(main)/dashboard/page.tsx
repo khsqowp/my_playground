@@ -1,235 +1,289 @@
 export const dynamic = "force-dynamic";
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { WidgetGrid } from '@/components/dashboard/WidgetGrid';
-import { QuickMemo } from '@/components/dashboard/QuickMemo';
-import { RecentActivity } from '@/components/dashboard/RecentActivity';
-import { CustomLinks } from '@/components/dashboard/CustomLinks';
-import prisma from '@/lib/prisma';
-import { FileText, BookOpen, StickyNote, Database, Zap, Archive } from 'lucide-react';
-import Link from 'next/link';
 
-// Server Component - fetches data directly from Prisma
-async function getDashboardStats(userId: string) {
-  const [postsCount, notesCount, memosCount] = await Promise.all([
-    prisma.post.count({
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import {
+  Archive,
+  BookOpen,
+  Database,
+  FileArchive,
+  FileText,
+  Globe2,
+  Inbox,
+  StickyNote,
+} from "lucide-react";
+import { auth } from "@/lib/auth";
+import prisma from "@/lib/prisma";
+import { listCaptures, listWatchlist } from "@/lib/site-archive";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { QuickMemo } from "@/components/dashboard/QuickMemo";
+import { RecentActivity } from "@/components/dashboard/RecentActivity";
+import { CustomLinks } from "@/components/dashboard/CustomLinks";
+import { ClockCard } from "@/components/dashboard/ClockCard";
+
+async function getDashboardData(userId: string) {
+  const [posts, notes, memos, archiveFiles, recentPosts, recentFiles, watches, captures] = await Promise.all([
+    prisma.post.count({ where: { authorId: userId } }),
+    prisma.note.count({ where: { authorId: userId } }),
+    prisma.memo.count({ where: { authorId: userId } }),
+    prisma.archiveFile.count({ where: { authorId: userId } }),
+    prisma.post.findMany({
       where: { authorId: userId },
+      orderBy: { updatedAt: "desc" },
+      take: 4,
+      select: { id: true, title: true, published: true, updatedAt: true },
     }),
-    prisma.note.count({
+    prisma.archiveFile.findMany({
       where: { authorId: userId },
+      orderBy: { updatedAt: "desc" },
+      take: 5,
+      select: { id: true, fileName: true, folder: true, aiStatus: true, updatedAt: true },
     }),
-    prisma.memo.count({
-      where: { authorId: userId },
-    }),
+    listWatchlist(userId),
+    listCaptures(userId),
   ]);
 
+  const recentCaptures = captures.slice(0, 5);
+  const unreadArchivePrompt = recentCaptures.filter((capture) => {
+    const capturedAt = new Date(capture.data.capturedAt).getTime();
+    return Number.isFinite(capturedAt) && Date.now() - capturedAt < 1000 * 60 * 60 * 24 * 7;
+  });
+
   return {
-    posts: postsCount,
-    notes: notesCount,
-    memos: memosCount,
+    stats: {
+      posts,
+      notes,
+      memos,
+      archiveFiles,
+      siteWatches: watches.length,
+      siteCaptures: captures.length,
+      dailyWatches: watches.filter((watch) => watch.data.enabled && watch.data.schedule === "daily").length,
+    },
+    recentPosts,
+    recentFiles,
+    recentCaptures,
+    unreadArchivePrompt,
   };
 }
 
-async function getRecentPosts(userId: string) {
-  return await prisma.post.findMany({
-    where: { authorId: userId },
-    orderBy: { createdAt: 'desc' },
-    take: 3,
-    select: {
-      id: true,
-      title: true,
-      published: true,
-      createdAt: true,
-    },
+function formatDate(value: Date | string) {
+  return new Date(value).toLocaleDateString("ko-KR", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
-
-// Quick links configuration
-const quickLinks = [
-  {
-    title: '블로그 글',
-    description: '블로그 글 작성 및 관리',
-    href: '/blog',
-    icon: FileText,
-    color: 'bg-blue-500',
-  },
-  {
-    title: '아카이브',
-    description: '학습 노트 및 자료 모음',
-    href: '/archive',
-    icon: BookOpen,
-    color: 'bg-green-500',
-  },
-  {
-    title: '데이터 허브',
-    description: '콜렉션 및 레코드 관리',
-    href: '/data',
-    icon: Database,
-    color: 'bg-purple-500',
-  },
-  {
-    title: '자동화',
-    description: '웹훅 및 AI 연동',
-    href: '/automation',
-    icon: Zap,
-    color: 'bg-yellow-500',
-  },
-];
-
-import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
 
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  const userId = session.user.id;
 
-  const stats = await getDashboardStats(userId);
-  const recentPosts = await getRecentPosts(userId);
+  const { stats, recentPosts, recentFiles, recentCaptures, unreadArchivePrompt } = await getDashboardData(session.user.id);
+
+  const primaryLinks = [
+    {
+      title: "사이트 아카이브",
+      description: "페이지를 로컬 저장본으로 보관",
+      href: "/archive/sites",
+      icon: Globe2,
+    },
+    {
+      title: "RAG 프로젝트 관리",
+      description: "파일 자료와 벡터화 상태 관리",
+      href: "/archive/files/manage",
+      icon: FileArchive,
+    },
+    {
+      title: "데이터 허브",
+      description: "JSON 컬렉션과 레코드 관리",
+      href: "/data",
+      icon: Database,
+    },
+    {
+      title: "글 관리",
+      description: "블로그 글과 초안 정리",
+      href: "/manage/blog",
+      icon: FileText,
+    },
+  ];
 
   return (
-    <div className="container mx-auto px-4 py-8 space-y-8">
-      {/* Welcome Section */}
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">돌아오신 것을 환영합니다!</h1>
-        <p className="text-muted-foreground">
-          오늘의 콘텐츠 현황을 확인하세요.
-        </p>
-      </div>
-
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">전체 글</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.posts}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              발행 및 임시저장 글
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">학습 노트</CardTitle>
-            <BookOpen className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.notes}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              아카이브된 학습 자료
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">빠른 메모</CardTitle>
-            <StickyNote className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.memos}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              저장된 메모 및 리마인더
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Quick Links Grid */}
-      <div>
-        <h2 className="text-xl font-semibold mb-4">빠른 접근</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {quickLinks.map((link) => {
-            const Icon = link.icon;
-            return (
-              <Link key={link.href} href={link.href}>
-                <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
-                  <CardContent className="p-6">
-                    <div className="flex items-start space-x-4">
-                      <div className={`${link.color} p-3 rounded-lg`}>
-                        <Icon className="h-6 w-6 text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-semibold mb-1">{link.title}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {link.description}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            );
-          })}
+    <div className="space-y-6 px-4 py-6 lg:px-8">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">대시보드</h1>
+          <p className="mt-1 text-muted-foreground">
+            오늘 확인할 저장본, 자료 상태, 최근 작업을 한 화면에서 봅니다.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="secondary">{stats.dailyWatches}개 자동 아카이브 활성</Badge>
+          <Badge variant="outline">{stats.siteCaptures}개 사이트 저장본</Badge>
         </div>
       </div>
 
-      {/* Widget Grid - Client Components */}
-      <div>
-        <h2 className="text-xl font-semibold mb-4">대시보드 위젯</h2>
-        <WidgetGrid>
-          <QuickMemo />
-          <RecentActivity />
-          <CustomLinks />
-        </WidgetGrid>
+      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>오늘 볼 것</CardTitle>
+            <CardDescription>최근 저장된 사이트 아카이브와 확인할 자료를 우선 표시합니다.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {unreadArchivePrompt.length === 0 ? (
+              <div className="flex items-center gap-3 rounded-md border p-4 text-sm text-muted-foreground">
+                <Inbox className="h-5 w-5" />
+                최근 7일 내 새 사이트 저장본이 없습니다.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {unreadArchivePrompt.slice(0, 4).map((capture) => (
+                  <Link
+                    key={capture.id}
+                    href="/archive/sites"
+                    className="block rounded-md border p-4 transition-colors hover:bg-accent/50"
+                  >
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{capture.data.title}</div>
+                        <div className="mt-1 truncate text-xs text-muted-foreground">{capture.data.sourceUrl}</div>
+                      </div>
+                      <Badge variant={capture.data.changed ? "secondary" : "outline"}>
+                        {capture.data.changed ? "변경됨" : "확인됨"}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{capture.data.textPreview}</p>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <ClockCard />
       </div>
 
-      {/* Recent Posts */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+        {[
+          { label: "글", value: stats.posts, icon: FileText },
+          { label: "노트", value: stats.notes, icon: BookOpen },
+          { label: "메모", value: stats.memos, icon: StickyNote },
+          { label: "파일", value: stats.archiveFiles, icon: FileArchive },
+          { label: "수집 URL", value: stats.siteWatches, icon: Globe2 },
+          { label: "페이지 저장본", value: stats.siteCaptures, icon: Archive },
+        ].map((item) => (
+          <Card key={item.label}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{item.label}</CardTitle>
+              <item.icon className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{item.value}</div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {primaryLinks.map((link) => (
+          <Link key={link.href} href={link.href}>
+            <Card className="h-full transition-colors hover:bg-accent/50">
+              <CardContent className="flex items-start gap-4 p-5">
+                <div className="rounded-md bg-primary/10 p-2 text-primary">
+                  <link.icon className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="font-semibold">{link.title}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">{link.description}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>최근 사이트 저장본</CardTitle>
+            <CardDescription>자동 또는 수동으로 로컬에 저장한 페이지입니다.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {recentCaptures.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">아직 사이트 저장본이 없습니다.</p>
+            ) : (
+              <div className="space-y-3">
+                {recentCaptures.map((capture) => (
+                  <Link key={capture.id} href="/archive/sites" className="block rounded-md border p-3 hover:bg-accent/50">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">{capture.data.title}</div>
+                        <div className="mt-1 truncate text-xs text-muted-foreground">{capture.data.folder}</div>
+                      </div>
+                      <span className="shrink-0 text-xs text-muted-foreground">{formatDate(capture.data.capturedAt)}</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>최근 RAG 파일</CardTitle>
+            <CardDescription>최근 업로드되거나 갱신된 아카이브 파일입니다.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {recentFiles.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">아직 파일 아카이브가 없습니다.</p>
+            ) : (
+              <div className="space-y-3">
+                {recentFiles.map((file) => (
+                  <Link key={file.id} href={`/archive/files/${file.id}`} className="block rounded-md border p-3 hover:bg-accent/50">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">{file.fileName}</div>
+                        <div className="mt-1 flex flex-wrap gap-2">
+                          <Badge variant="outline">{file.folder}</Badge>
+                          <Badge variant="secondary">{file.aiStatus}</Badge>
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-xs text-muted-foreground">{formatDate(file.updatedAt)}</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <QuickMemo />
+        <RecentActivity />
+        <CustomLinks />
+      </div>
+
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg font-semibold">최근 글</CardTitle>
-            <Link
-              href="/blog"
-              className="text-sm text-primary hover:underline"
-            >
-              전체 보기
-            </Link>
-          </div>
+          <CardTitle>최근 글</CardTitle>
+          <CardDescription>마지막으로 수정한 글과 발행 상태입니다.</CardDescription>
         </CardHeader>
         <CardContent>
           {recentPosts.length === 0 ? (
-            <div className="text-center py-12">
-              <Archive className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground mb-4">
-                아직 글이 없습니다. 글을 작성해보세요!
-              </p>
-              <Link href="/blog/new">
-                <button className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
-                  첫 번째 글 작성하기
-                </button>
-              </Link>
-            </div>
+            <p className="py-10 text-center text-sm text-muted-foreground">아직 글이 없습니다.</p>
           ) : (
-            <div className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-2">
               {recentPosts.map((post) => (
-                <Link
-                  key={post.id}
-                  href={`/blog/${post.id}`}
-                  className="block p-4 rounded-lg border hover:bg-accent/50 transition-colors"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h3 className="font-medium mb-1">{post.title}</h3>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(post.createdAt).toLocaleDateString('ko-KR', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })}
-                      </p>
+                <Link key={post.id} href={`/blog/edit/${post.id}`} className="rounded-md border p-4 hover:bg-accent/50">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{post.title}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{formatDate(post.updatedAt)}</div>
                     </div>
-                    <span
-                      className={`text-xs px-2 py-1 rounded ${post.published
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                        }`}
-                    >
-                      {post.published ? '발행됨' : '임시저장'}
-                    </span>
+                    <Badge variant={post.published ? "secondary" : "outline"}>{post.published ? "발행" : "초안"}</Badge>
                   </div>
                 </Link>
               ))}
