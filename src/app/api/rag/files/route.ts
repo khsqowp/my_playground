@@ -185,6 +185,15 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    if (action === "cache-status") {
+      const serviceUrl = process.env.RAG_SERVICE_URL || "http://rag-web:8088";
+      const cacheParams = new URLSearchParams();
+      if (project) cacheParams.set("project", project);
+      const res = await fetch(`${serviceUrl}/api/cache?${cacheParams.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      return NextResponse.json(data, { status: res.status });
+    }
+
     const { projectRoot, target } = resolveProjectPath(project, requestedPath);
 
     if (action === "list") {
@@ -321,6 +330,22 @@ export async function POST(request: NextRequest) {
           { status: res.status }
         );
       }
+      return NextResponse.json(data, { status: res.status });
+    }
+
+    if (action === "cache-clear") {
+      const body = await request.json().catch(() => ({}));
+      const project = String(body.project || process.env.RAG_DEFAULT_PROJECT || "inbox").normalize("NFC");
+      const serviceUrl = process.env.RAG_SERVICE_URL || "http://rag-web:8088";
+      const res = await fetch(`${serviceUrl}/api/cache`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project,
+          include_legacy: body.includeLegacy ?? true,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
       return NextResponse.json(data, { status: res.status });
     }
 

@@ -43,6 +43,15 @@ interface ChatMessage {
   content: string;
 }
 
+interface CacheStatus {
+  enabled: boolean;
+  count: number;
+  expired_count: number;
+  legacy_count: number;
+  total_bytes: number;
+  ttl_seconds: number;
+}
+
 const SUPPORTED_ACCEPT = [
   ".pdf",
   ".docx",
@@ -110,6 +119,9 @@ export function RagFileArchive({
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [reindexing, setReindexing] = useState(false);
+  const [cacheStatus, setCacheStatus] = useState<CacheStatus | null>(null);
+  const [cacheLoading, setCacheLoading] = useState(false);
+  const [cacheClearing, setCacheClearing] = useState(false);
   const [query, setQuery] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -160,6 +172,25 @@ export function RagFileArchive({
     }
   }, [currentPath, project]);
 
+  const loadCacheStatus = useCallback(async (nextProject = project) => {
+    setCacheLoading(true);
+    try {
+      const params = new URLSearchParams({
+        action: "cache-status",
+        project: nextProject,
+      });
+      const res = await fetch(`/api/rag/files?${params}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || data.error || "캐시 상태 조회 실패");
+      setCacheStatus(data);
+    } catch (error: any) {
+      setCacheStatus(null);
+      toast.error(error.message || "캐시 상태를 불러오지 못했습니다.");
+    } finally {
+      setCacheLoading(false);
+    }
+  }, [project]);
+
   useEffect(() => {
     loadProjects().catch((error) => toast.error(error.message || "RAG 프로젝트를 불러오지 못했습니다."));
   }, [loadProjects]);
@@ -168,8 +199,9 @@ export function RagFileArchive({
     if (project) {
       setSelected(null);
       loadItems(project, currentPath);
+      loadCacheStatus(project);
     }
-  }, [project, currentPath, loadItems]);
+  }, [project, currentPath, loadItems, loadCacheStatus]);
 
   useEffect(() => {
     setChatMessages([
@@ -262,10 +294,31 @@ export function RagFileArchive({
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || data.error || "재색인 요청 실패");
       toast.success(`재색인을 시작했습니다. job: ${data.job_id || "queued"}`);
+      loadCacheStatus(project);
     } catch (error: any) {
       toast.error(error.message || "재색인을 시작하지 못했습니다.");
     } finally {
       setReindexing(false);
+    }
+  };
+
+  const handleClearCache = async () => {
+    if (!confirm(`"${project}" 프로젝트의 RAG 답변 캐시를 삭제하시겠습니까?`)) return;
+    setCacheClearing(true);
+    try {
+      const res = await fetch("/api/rag/files?action=cache-clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project, includeLegacy: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || data.error || "캐시 삭제 실패");
+      setCacheStatus(data.status || null);
+      toast.success(`${data.removed || 0}개 캐시 항목을 삭제했습니다.`);
+    } catch (error: any) {
+      toast.error(error.message || "캐시 삭제 중 오류가 발생했습니다.");
+    } finally {
+      setCacheClearing(false);
     }
   };
 
@@ -314,6 +367,13 @@ export function RagFileArchive({
           <p className="mt-1 text-xs text-muted-foreground">
             RAG 자료 루트: {root || "설정되지 않음"}
           </p>
+          {cacheStatus && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              답변 캐시: {cacheStatus.enabled ? `${cacheStatus.count}개 / ${formatBytes(cacheStatus.total_bytes)}` : "비활성화"}
+              {cacheStatus.expired_count > 0 ? `, 만료 ${cacheStatus.expired_count}개` : ""}
+              {cacheStatus.legacy_count > 0 ? `, 이전 형식 ${cacheStatus.legacy_count}개` : ""}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -341,6 +401,14 @@ export function RagFileArchive({
           <Button variant="outline" size="sm" onClick={handleReindex} disabled={reindexing}>
             {reindexing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Database className="mr-2 h-4 w-4" />}
             RAG 재색인
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => loadCacheStatus(project)} disabled={cacheLoading}>
+            {cacheLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-2 h-4 w-4" />}
+            캐시 상태
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleClearCache} disabled={cacheClearing || cacheLoading}>
+            {cacheClearing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+            캐시 삭제
           </Button>
           <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
             {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}

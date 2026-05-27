@@ -52,6 +52,11 @@ class DataRootRequest(BaseModel):
     path: str
 
 
+class CacheClearRequest(BaseModel):
+    project: str | None = None
+    include_legacy: bool = False
+
+
 def _answer_cache_enabled() -> bool:
     return os.environ.get("ENABLE_ANSWER_CACHE", "1") == "1"
 
@@ -121,6 +126,79 @@ def _write_answer_cache(key: str, data: dict) -> None:
     payload = {**data, "created_at": time.time()}
     temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     temp_path.replace(path)
+
+
+def _iter_answer_cache_files() -> list[Path]:
+    if not ANSWER_CACHE_ROOT.exists():
+        return []
+    return sorted(path for path in ANSWER_CACHE_ROOT.glob("*.json") if path.is_file())
+
+
+def _answer_cache_file_project(path: Path) -> str | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    project = data.get("project")
+    return str(project) if project else None
+
+
+def _answer_cache_stats(project: str | None = None) -> dict:
+    files = _iter_answer_cache_files()
+    ttl_seconds = _answer_cache_ttl_seconds()
+    now = time.time()
+    selected = []
+    expired = 0
+    legacy = 0
+    total_bytes = 0
+    newest: float | None = None
+    oldest: float | None = None
+    for path in files:
+        try:
+            stat = path.stat()
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        entry_project = data.get("project")
+        if project and entry_project != project:
+            continue
+        created_at = float(data.get("created_at", 0))
+        if not entry_project:
+            legacy += 1
+        if created_at and now - created_at > ttl_seconds:
+            expired += 1
+        total_bytes += stat.st_size
+        newest = created_at if newest is None else max(newest, created_at)
+        oldest = created_at if oldest is None else min(oldest, created_at)
+        selected.append(path)
+    return {
+        "enabled": _answer_cache_enabled(),
+        "root": str(ANSWER_CACHE_ROOT),
+        "project": project,
+        "count": len(selected),
+        "expired_count": expired,
+        "legacy_count": legacy,
+        "total_bytes": total_bytes,
+        "ttl_seconds": ttl_seconds,
+        "oldest_created_at": oldest,
+        "newest_created_at": newest,
+    }
+
+
+def _clear_answer_cache(project: str | None = None, include_legacy: bool = False) -> dict:
+    removed = 0
+    skipped = 0
+    for path in _iter_answer_cache_files():
+        entry_project = _answer_cache_file_project(path)
+        if project and entry_project != project and not (include_legacy and entry_project is None):
+            skipped += 1
+            continue
+        try:
+            path.unlink()
+            removed += 1
+        except OSError:
+            skipped += 1
+    return {"removed": removed, "skipped": skipped, "project": project, "include_legacy": include_legacy}
 
 
 def _sse_event(data: dict) -> str:
@@ -352,7 +430,7 @@ def ask(request: AskRequest, x_gemini_api_key: str | None = Header(default=None)
         answer, web_sources = call_gemini(prompt, request.web_search, x_gemini_api_key)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    _write_answer_cache(cache_key, {"answer": answer, "web_sources": web_sources})
+    _write_answer_cache(cache_key, {"project": project, "answer": answer, "web_sources": web_sources})
 
     return {
         "answer": answer,
@@ -399,7 +477,7 @@ def ask_stream(request: AskRequest, x_gemini_api_key: str | None = Header(defaul
                     yield _sse_event({"type": "web_sources", "sources": event["sources"]})
             answer = "".join(answer_parts)
             if answer:
-                _write_answer_cache(cache_key, {"answer": answer, "web_sources": web_sources})
+                _write_answer_cache(cache_key, {"project": project, "answer": answer, "web_sources": web_sources})
         except Exception as exc:
             yield _sse_event({"type": "error", "detail": str(exc)})
         yield _sse_event({"type": "done"})
@@ -409,6 +487,20 @@ def ask_stream(request: AskRequest, x_gemini_api_key: str | None = Header(defaul
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.get("/api/cache")
+def answer_cache_status(project: str | None = None) -> dict:
+    if project:
+        project = ensure_project(project)
+    return _answer_cache_stats(project)
+
+
+@app.delete("/api/cache")
+def answer_cache_clear(request: CacheClearRequest) -> dict:
+    project = ensure_project(request.project) if request.project else None
+    result = _clear_answer_cache(project, request.include_legacy)
+    return {**result, "status": _answer_cache_stats(project)}
 
 
 @app.post("/api/reindex")
