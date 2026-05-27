@@ -268,7 +268,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ type: "binary", mimeType, size: stats.size });
     }
 
-    if (action === "download") {
+    if (action === "download" || action === "view") {
       if (!fs.existsSync(target)) {
         return NextResponse.json({ error: "File not found" }, { status: 404 });
       }
@@ -277,10 +277,12 @@ export async function GET(request: NextRequest) {
       }
       const buffer = fs.readFileSync(target);
       const mimeType = mime.getType(target) || "application/octet-stream";
+      const disposition = action === "view" ? "inline" : "attachment";
       return new NextResponse(buffer, {
         headers: {
           "Content-Type": mimeType,
-          "Content-Disposition": `attachment; filename="${encodeURIComponent(path.basename(target))}"`,
+          "Content-Disposition": `${disposition}; filename="${encodeURIComponent(path.basename(target))}"`,
+          "Cache-Control": "private, max-age=60",
         },
       });
     }

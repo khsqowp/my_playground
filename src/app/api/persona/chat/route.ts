@@ -2,18 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { callAI, chatWithPersona } from "@/lib/ai";
 import { isServiceRequest } from "@/lib/service-auth";
+import {
+  formatRagReferences,
+  stripGeneratedSourceSection,
+  type RagContextReference,
+} from "@/lib/rag-references";
 
 interface HistoryMessage {
   role: "user" | "assistant";
   content: string;
-}
-
-interface RagContext {
-  id?: number;
-  source?: string | null;
-  page?: number | string | null;
-  locator?: string | null;
-  score?: number;
 }
 
 function ragServiceUrl() {
@@ -22,43 +19,6 @@ function ragServiceUrl() {
 
 function ragGeminiApiKey() {
   return (process.env.AI_RAG_API_KEY_GEMINI || process.env.GEMINI_API_KEY || "").trim();
-}
-
-function stripGeneratedSourceSection(answer: string) {
-  const marker = answer.search(/\n\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(출처|참조 자료|로컬 문서 출처|references?)\s*(?:\*\*)?\s*\n/i);
-  return marker >= 0 ? answer.slice(0, marker).trim() : answer.trim();
-}
-
-function citedContextIds(answer: string) {
-  return new Set(
-    Array.from(answer.matchAll(/\[(\d+)\]/g))
-      .map((match) => Number(match[1]))
-      .filter((id) => Number.isFinite(id) && id > 0)
-  );
-}
-
-function formatRagReferences(contexts: RagContext[], answer: string) {
-  if (!Array.isArray(contexts) || contexts.length === 0) return "";
-
-  const citedIds = citedContextIds(answer);
-  const relevantContexts = citedIds.size > 0
-    ? contexts.filter((context, index) => citedIds.has(context.id ?? index + 1))
-    : contexts.slice(0, 3);
-  const seen = new Set<string>();
-  const lines = relevantContexts
-    .filter((context) => context.source)
-    .map((context, index) => {
-      const id = context.id ?? index + 1;
-      const location = context.locator || (context.page ? `page ${context.page}` : "");
-      const key = `${context.source}|${location}`;
-      if (seen.has(key)) return null;
-      seen.add(key);
-      return `- [${id}] ${context.source}${location ? `, ${location}` : ""}`;
-    })
-    .filter(Boolean)
-    .slice(0, 5);
-
-  return lines.length > 0 ? `\n\n---\n\n**참조 자료**\n${lines.join("\n")}` : "";
 }
 
 async function askProjectRag(message: string, project: string, history?: HistoryMessage[]) {
@@ -109,7 +69,7 @@ async function askProjectRag(message: string, project: string, history?: History
 
   const rawAnswer = data.answer || "답변을 생성하지 못했습니다.";
   const answer = stripGeneratedSourceSection(rawAnswer);
-  return `${answer}${formatRagReferences(data.contexts || [], rawAnswer)}`;
+  return `${answer}${formatRagReferences((data.contexts || []) as RagContextReference[], rawAnswer, project)}`;
 }
 
 export async function POST(req: NextRequest) {
