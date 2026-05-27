@@ -77,7 +77,7 @@ def _answer_cache_fingerprint(contexts: list[dict]) -> str:
 def _answer_cache_key(project: str, query: str, limit: int, web_search: bool, contexts: list[dict]) -> str:
     raw = json.dumps(
         {
-            "version": 1,
+            "version": 2,
             "project": project,
             "query": query,
             "limit": limit,
