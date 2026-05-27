@@ -2,6 +2,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -41,20 +42,94 @@ def _emit(event: dict) -> None:
     import sys
     print(json.dumps(event, ensure_ascii=False), flush=True, file=sys.stdout)
 def clean_text(text: str) -> str:
-    lines = [line.strip() for line in text.splitlines()]
-    text = "\n".join(line for line in lines if line)
-    return " ".join(text.split())
+    lines = [" ".join(line.strip().split()) for line in text.splitlines()]
+    return "\n".join(line for line in lines if line)
+
+
+def _is_heading(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped or len(stripped) > 80:
+        return False
+    if len(stripped) > 30 and " " not in stripped:
+        return False
+    if stripped.endswith((".", "?", "!", "다", "요", "함", "됨", "임")):
+        return False
+    return bool(re.match(r"^(\d+[\).]|[IVX]+\.|[가-힣A-Za-z][\).]|[#\-*])?\s*[\w가-힣][\w\s가-힣:/·ㆍ-]{1,}$", stripped))
+
+
+def _split_long_unit(unit: str, size: int, overlap: int) -> Iterable[str]:
+    step = size - overlap
+    start = 0
+    while start < len(unit):
+        chunk = unit[start : start + size].strip()
+        if chunk:
+            yield chunk
+        start += step
+
+
+def _tail_units(units: list[str], max_chars: int) -> list[str]:
+    if max_chars <= 0:
+        return []
+    total = 0
+    selected: list[str] = []
+    for unit in reversed(units):
+        unit_len = len(unit) + (1 if selected else 0)
+        if selected and total + unit_len > max_chars:
+            break
+        if not selected and unit_len > max_chars:
+            break
+        selected.append(unit)
+        total += unit_len
+    return list(reversed(selected))
 
 
 def chunk_text(text: str, size: int, overlap: int) -> Iterable[str]:
     if size <= overlap:
         raise ValueError("CHUNK_SIZE must be greater than CHUNK_OVERLAP")
-    start = 0
-    while start < len(text):
-        chunk = text[start : start + size].strip()
-        if chunk:
-            yield chunk
-        start += size - overlap
+    units = [unit.strip() for unit in text.splitlines() if unit.strip()]
+    if not units:
+        units = [" ".join(text.split())]
+
+    current: list[str] = []
+    active_heading: str | None = None
+
+    def emit_current() -> list[str]:
+        nonlocal current
+        if not current:
+            return []
+        chunk = "\n".join(current).strip()
+        current = _tail_units(current, overlap)
+        return [chunk] if chunk else []
+
+    for unit in units:
+        if _is_heading(unit):
+            for chunk in emit_current():
+                yield chunk
+            active_heading = unit
+            current = [unit]
+            continue
+
+        if len(unit) > size:
+            for chunk in emit_current():
+                yield chunk
+            prefix = [active_heading] if active_heading and active_heading != unit else []
+            long_text = "\n".join(prefix + [unit]).strip()
+            for chunk in _split_long_unit(long_text, size, overlap):
+                yield chunk
+            current = []
+            continue
+
+        proposed = current + [unit]
+        if len("\n".join(proposed)) > size:
+            for chunk in emit_current():
+                yield chunk
+            if active_heading and active_heading not in current and unit != active_heading:
+                current = [active_heading]
+            proposed = current + [unit]
+        current = proposed
+
+    for chunk in emit_current():
+        yield chunk
 
 
 def iter_batches(items: list, batch_size: int) -> Iterable[list]:
