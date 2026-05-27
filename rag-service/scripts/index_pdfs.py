@@ -64,6 +64,13 @@ def chunk_text(text: str, size: int, overlap: int) -> Iterable[str]:
         start += size - overlap
 
 
+def iter_batches(items: list, batch_size: int) -> Iterable[list]:
+    if batch_size <= 0:
+        raise ValueError("batch_size must be greater than 0")
+    for start in range(0, len(items), batch_size):
+        yield items[start : start + batch_size]
+
+
 def safe_name(value: str) -> str:
     cleaned = re.sub(r"[^0-9A-Za-z가-힣_-]+", "_", value).strip("_")
     return cleaned or "default"
@@ -784,6 +791,7 @@ def main() -> None:
     chunk_size = int(os.environ.get("CHUNK_SIZE", "1400"))
     overlap = int(os.environ.get("CHUNK_OVERLAP", "200"))
     min_chunk_chars = int(os.environ.get("MIN_CHUNK_CHARS", "80"))
+    index_batch_size = int(os.environ.get("INDEX_BATCH_SIZE", "128"))
 
     files = iter_supported_files(project_dir)
     if not files:
@@ -870,8 +878,7 @@ def main() -> None:
                 "error": str(exc),
             })
             continue
-        texts = [chunk["text"] for chunk in chunks]
-        if not texts:
+        if not chunks:
             files_skipped += 1
             _emit({
                 "event": "file_skip",
@@ -882,24 +889,28 @@ def main() -> None:
                 "reason": "텍스트 추출 결과 없음",
             })
             continue
-        vectors = list(tqdm(embedder.embed(texts), total=len(texts), desc=filename, file=__import__("sys").stderr))
-        sparse_vectors = list(sparse_embedder.embed(texts))
-        points = [
-            PointStruct(
-                id=point_id(chunk["source"], chunk["locator"], chunk["chunk_idx"], chunk["text"]),
-                vector={
-                    "dense": vector.tolist(),
-                    "sparse": SparseVector(
-                        indices=sv.indices.tolist(),
-                        values=sv.values.tolist(),
-                    ),
-                },
-                payload=chunk,
-            )
-            for chunk, vector, sv in zip(chunks, vectors, sparse_vectors)
-        ]
-        client.upsert(collection_name=collection, points=points)
-        total_chunks += len(points)
+        file_points = 0
+        for chunk_batch in iter_batches(chunks, index_batch_size):
+            texts = [chunk["text"] for chunk in chunk_batch]
+            vectors = list(tqdm(embedder.embed(texts), total=len(texts), desc=filename, file=__import__("sys").stderr))
+            sparse_vectors = list(sparse_embedder.embed(texts))
+            points = [
+                PointStruct(
+                    id=point_id(chunk["source"], chunk["locator"], chunk["chunk_idx"], chunk["text"]),
+                    vector={
+                        "dense": vector.tolist(),
+                        "sparse": SparseVector(
+                            indices=sv.indices.tolist(),
+                            values=sv.values.tolist(),
+                        ),
+                    },
+                    payload=chunk,
+                )
+                for chunk, vector, sv in zip(chunk_batch, vectors, sparse_vectors)
+            ]
+            client.upsert(collection_name=collection, points=points)
+            file_points += len(points)
+        total_chunks += file_points
         files_done += 1
         _emit({
             "event": "file_done",
@@ -907,7 +918,7 @@ def main() -> None:
             "total_files": total_files,
             "filename": filename,
             "source": source,
-            "chunks": len(points),
+            "chunks": file_points,
         })
 
     save_manifest(args.project, {"files": current_files})
