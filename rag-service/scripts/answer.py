@@ -3,6 +3,7 @@ import json
 import os
 import re
 import sys
+import threading
 from typing import Iterator
 
 import requests
@@ -14,14 +15,26 @@ from index_pdfs import collection_for_project
 
 
 _sparse_embedder: SparseTextEmbedding | None = None
+_dense_embedders: dict[str, TextEmbedding] = {}
 _reranker = None
+_embedder_lock = threading.Lock()
+
+
+def _get_dense_embedder(model_name: str) -> TextEmbedding:
+    with _embedder_lock:
+        embedder = _dense_embedders.get(model_name)
+        if embedder is None:
+            embedder = TextEmbedding(model_name=model_name)
+            _dense_embedders[model_name] = embedder
+        return embedder
 
 
 def _get_sparse_embedder() -> SparseTextEmbedding:
     global _sparse_embedder
-    if _sparse_embedder is None:
-        _sparse_embedder = SparseTextEmbedding(model_name="Qdrant/bm25")
-    return _sparse_embedder
+    with _embedder_lock:
+        if _sparse_embedder is None:
+            _sparse_embedder = SparseTextEmbedding(model_name="Qdrant/bm25")
+        return _sparse_embedder
 
 
 def _get_reranker():
@@ -49,7 +62,7 @@ def retrieve(query: str, limit: int, candidates: int, project: str | None = None
     collection = collection_for_project(project or os.environ.get("PROJECT_NAME", "inbox"))
     model_name = os.environ["EMBEDDING_MODEL"]
 
-    embedder = TextEmbedding(model_name=model_name)
+    embedder = _get_dense_embedder(model_name)
     dense_vector = next(embedder.embed([query])).tolist()
 
     client = QdrantClient(url=qdrant_url)
