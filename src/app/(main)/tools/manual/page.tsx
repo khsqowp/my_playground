@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, ClipboardCopy, FlaskConical, Plus, Radar, ShieldCheck } from "lucide-react";
+import { Activity, Archive, ClipboardCopy, FlaskConical, Plus, Radar, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,12 +60,37 @@ type PayloadRecord = {
   updatedAt: string;
 };
 
+type ArchiveRule = {
+  kind: "archive-rule";
+  ownerId: string;
+  name: string;
+  folder: string;
+  keywords: string[];
+  extensions: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+type ArchiveFileSuggestion = {
+  id: string;
+  fileName: string;
+  extension: string;
+  folder: string;
+  aiSummary: string | null;
+  aiTags: string | null;
+  fileSize: number;
+  updatedAt: string;
+  suggestedRules: { id: string; name: string; folder: string }[];
+};
+
 const payloadCategories = ["sqli", "xss", "ssrf", "ssti", "lfi", "xxe", "cmdi", "auth", "recon", "other"];
 
 export default function ManualSecurityPage() {
   const [sessions, setSessions] = useState<StoredRecord<ManualSession>[]>([]);
   const [callbacks, setCallbacks] = useState<StoredRecord<OobCallback>[]>([]);
   const [payloads, setPayloads] = useState<StoredRecord<PayloadRecord>[]>([]);
+  const [archiveRules, setArchiveRules] = useState<StoredRecord<ArchiveRule>[]>([]);
+  const [archiveFiles, setArchiveFiles] = useState<ArchiveFileSuggestion[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [origin, setOrigin] = useState("");
   const [loading, setLoading] = useState(false);
@@ -80,6 +105,12 @@ export default function ManualSecurityPage() {
     context: "",
     expectedSignal: "",
     tags: "",
+  });
+  const [archiveRuleForm, setArchiveRuleForm] = useState({
+    name: "",
+    folder: "Security/Unsorted",
+    keywords: "",
+    extensions: "",
   });
 
   const selectedSession = useMemo(
@@ -117,10 +148,19 @@ export default function ManualSecurityPage() {
     setPayloads(data.payloads || []);
   }
 
+  async function loadArchiveClassifier() {
+    const res = await fetch("/api/tools/manual/archive");
+    if (!res.ok) throw new Error("보안 아카이브 정보를 불러오지 못했습니다.");
+    const data = await res.json();
+    setArchiveRules(data.rules || []);
+    setArchiveFiles(data.files || []);
+  }
+
   useEffect(() => {
     setOrigin(window.location.origin);
     loadSessions().catch((error) => toast.error(error.message));
     loadPayloads().catch((error) => toast.error(error.message));
+    loadArchiveClassifier().catch((error) => toast.error(error.message));
   }, []);
 
   useEffect(() => {
@@ -189,6 +229,50 @@ export default function ManualSecurityPage() {
       });
       await loadPayloads();
       toast.success("페이로드를 저장했습니다.");
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function createArchiveRule() {
+    if (!archiveRuleForm.name.trim() || !archiveRuleForm.folder.trim()) {
+      toast.error("규칙명과 분류 폴더를 입력해주세요.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/tools/manual/archive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(archiveRuleForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "분류 규칙 저장 실패");
+      setArchiveRuleForm({ name: "", folder: archiveRuleForm.folder, keywords: "", extensions: "" });
+      await loadArchiveClassifier();
+      toast.success("분류 규칙을 저장했습니다.");
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function applyArchiveRule(fileId: string, ruleId: string) {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/tools/manual/archive", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId, ruleId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "분류 적용 실패");
+      await loadArchiveClassifier();
+      toast.success("아카이브 파일을 분류했습니다.");
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -506,12 +590,124 @@ export default function ManualSecurityPage() {
         </TabsContent>
 
         <TabsContent value="archive">
-          <Card>
-            <CardHeader>
-              <CardTitle>Security Archive</CardTitle>
-              <CardDescription>다음 단계에서 구현됩니다.</CardDescription>
-            </CardHeader>
-          </Card>
+          <div className="grid gap-4 lg:grid-cols-[380px_1fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Archive className="h-5 w-5" />
+                  분류 규칙
+                </CardTitle>
+                <CardDescription>업로드된 자료를 보안 주제별 폴더로 수동 분류합니다.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>규칙명</Label>
+                  <Input
+                    placeholder="SSRF 자료"
+                    value={archiveRuleForm.name}
+                    onChange={(e) => setArchiveRuleForm({ ...archiveRuleForm, name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>분류 폴더</Label>
+                  <Input
+                    placeholder="Security/SSRF"
+                    value={archiveRuleForm.folder}
+                    onChange={(e) => setArchiveRuleForm({ ...archiveRuleForm, folder: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>키워드</Label>
+                  <Input
+                    placeholder="ssrf, metadata, 169.254.169.254"
+                    value={archiveRuleForm.keywords}
+                    onChange={(e) => setArchiveRuleForm({ ...archiveRuleForm, keywords: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>확장자</Label>
+                  <Input
+                    placeholder="pdf, md, txt"
+                    value={archiveRuleForm.extensions}
+                    onChange={(e) => setArchiveRuleForm({ ...archiveRuleForm, extensions: e.target.value })}
+                  />
+                </div>
+                <Button className="w-full" onClick={createArchiveRule} disabled={loading}>
+                  규칙 저장
+                </Button>
+                <Separator />
+                <ScrollArea className="h-72">
+                  <div className="space-y-2 pr-3">
+                    {archiveRules.map((rule) => (
+                      <div key={rule.id} className="rounded-md border p-3">
+                        <div className="font-medium">{rule.data.name}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">{rule.data.folder}</div>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {rule.data.keywords.map((keyword) => <Badge key={keyword} variant="outline">{keyword}</Badge>)}
+                          {rule.data.extensions.map((ext) => <Badge key={ext} variant="secondary">.{ext}</Badge>)}
+                        </div>
+                      </div>
+                    ))}
+                    {archiveRules.length === 0 && (
+                      <p className="py-10 text-center text-sm text-muted-foreground">분류 규칙이 없습니다.</p>
+                    )}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Archive Matches</CardTitle>
+                <CardDescription>규칙과 매칭된 파일만 적용 버튼이 표시됩니다.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="h-[700px]">
+                  <div className="space-y-3 pr-3">
+                    {archiveFiles.map((file) => (
+                      <div key={file.id} className="rounded-md border p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="font-medium">{file.fileName}</div>
+                            <div className="mt-1 flex flex-wrap gap-2">
+                              <Badge variant="outline">.{file.extension}</Badge>
+                              <Badge variant="secondary">{file.folder}</Badge>
+                              {file.aiTags && <Badge variant="outline">{file.aiTags}</Badge>}
+                            </div>
+                          </div>
+                          <Button variant="outline" size="sm" onClick={loadArchiveClassifier}>
+                            새로고침
+                          </Button>
+                        </div>
+                        {file.aiSummary && (
+                          <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">{file.aiSummary}</p>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {file.suggestedRules.map((rule) => (
+                            <Button
+                              key={rule.id}
+                              size="sm"
+                              variant="secondary"
+                              disabled={loading}
+                              onClick={() => applyArchiveRule(file.id, rule.id)}
+                            >
+                              {rule.name} → {rule.folder}
+                            </Button>
+                          ))}
+                          {file.suggestedRules.length === 0 && (
+                            <span className="text-sm text-muted-foreground">매칭된 규칙 없음</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {archiveFiles.length === 0 && (
+                      <p className="py-16 text-center text-sm text-muted-foreground">아카이브 파일이 없습니다.</p>
+                    )}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="recon">
