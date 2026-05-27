@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Archive, ClipboardCopy, FlaskConical, Plus, Radar, ShieldCheck } from "lucide-react";
+import { Activity, Archive, ClipboardCopy, FlaskConical, Plus, Radar, Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -83,7 +83,23 @@ type ArchiveFileSuggestion = {
   suggestedRules: { id: string; name: string; folder: string }[];
 };
 
+type ReconNote = {
+  kind: "recon-note";
+  ownerId: string;
+  title: string;
+  target: string;
+  assetType: "DOMAIN" | "IP" | "URL" | "API" | "ACCOUNT" | "OTHER";
+  observation: string;
+  evidence: string;
+  risk: "INFO" | "LOW" | "MEDIUM" | "HIGH";
+  status: "OPEN" | "REVIEWING" | "CLOSED";
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 const payloadCategories = ["sqli", "xss", "ssrf", "ssti", "lfi", "xxe", "cmdi", "auth", "recon", "other"];
+const assetTypes = ["DOMAIN", "IP", "URL", "API", "ACCOUNT", "OTHER"];
 
 export default function ManualSecurityPage() {
   const [sessions, setSessions] = useState<StoredRecord<ManualSession>[]>([]);
@@ -91,6 +107,7 @@ export default function ManualSecurityPage() {
   const [payloads, setPayloads] = useState<StoredRecord<PayloadRecord>[]>([]);
   const [archiveRules, setArchiveRules] = useState<StoredRecord<ArchiveRule>[]>([]);
   const [archiveFiles, setArchiveFiles] = useState<ArchiveFileSuggestion[]>([]);
+  const [reconNotes, setReconNotes] = useState<StoredRecord<ReconNote>[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [origin, setOrigin] = useState("");
   const [loading, setLoading] = useState(false);
@@ -111,6 +128,18 @@ export default function ManualSecurityPage() {
     folder: "Security/Unsorted",
     keywords: "",
     extensions: "",
+  });
+  const [reconFilter, setReconFilter] = useState("all");
+  const [reconSearch, setReconSearch] = useState("");
+  const [reconForm, setReconForm] = useState({
+    title: "",
+    target: "",
+    assetType: "DOMAIN",
+    risk: "INFO",
+    status: "OPEN",
+    observation: "",
+    evidence: "",
+    tags: "",
   });
 
   const selectedSession = useMemo(
@@ -156,11 +185,22 @@ export default function ManualSecurityPage() {
     setArchiveFiles(data.files || []);
   }
 
+  async function loadReconNotes(status = reconFilter, query = reconSearch) {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (query.trim()) params.set("q", query.trim());
+    const res = await fetch(`/api/tools/manual/recon?${params.toString()}`);
+    if (!res.ok) throw new Error("Recon 노트를 불러오지 못했습니다.");
+    const data = await res.json();
+    setReconNotes(data.notes || []);
+  }
+
   useEffect(() => {
     setOrigin(window.location.origin);
     loadSessions().catch((error) => toast.error(error.message));
     loadPayloads().catch((error) => toast.error(error.message));
     loadArchiveClassifier().catch((error) => toast.error(error.message));
+    loadReconNotes().catch((error) => toast.error(error.message));
   }, []);
 
   useEffect(() => {
@@ -273,6 +313,40 @@ export default function ManualSecurityPage() {
       if (!res.ok) throw new Error(data.error || "분류 적용 실패");
       await loadArchiveClassifier();
       toast.success("아카이브 파일을 분류했습니다.");
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function createReconNote() {
+    if (!reconForm.title.trim() || !reconForm.target.trim() || !reconForm.observation.trim()) {
+      toast.error("제목, 대상, 관찰 내용을 입력해주세요.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/tools/manual/recon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reconForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Recon 노트 저장 실패");
+      setReconForm({
+        title: "",
+        target: reconForm.target,
+        assetType: reconForm.assetType,
+        risk: "INFO",
+        status: "OPEN",
+        observation: "",
+        evidence: "",
+        tags: "",
+      });
+      await loadReconNotes();
+      toast.success("Recon 노트를 저장했습니다.");
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -711,12 +785,159 @@ export default function ManualSecurityPage() {
         </TabsContent>
 
         <TabsContent value="recon">
-          <Card>
-            <CardHeader>
-              <CardTitle>Recon Notes</CardTitle>
-              <CardDescription>다음 단계에서 구현됩니다.</CardDescription>
-            </CardHeader>
-          </Card>
+          <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Search className="h-5 w-5" />
+                  Recon Note
+                </CardTitle>
+                <CardDescription>수동 조사 중 발견한 자산, 노출 정보, 증거를 기록합니다.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-2">
+                    <Label>자산</Label>
+                    <Select value={reconForm.assetType} onValueChange={(value) => setReconForm({ ...reconForm, assetType: value })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {assetTypes.map((type) => <SelectItem key={type} value={type}>{type}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>리스크</Label>
+                    <Select value={reconForm.risk} onValueChange={(value) => setReconForm({ ...reconForm, risk: value })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="INFO">INFO</SelectItem>
+                        <SelectItem value="LOW">LOW</SelectItem>
+                        <SelectItem value="MEDIUM">MEDIUM</SelectItem>
+                        <SelectItem value="HIGH">HIGH</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>상태</Label>
+                    <Select value={reconForm.status} onValueChange={(value) => setReconForm({ ...reconForm, status: value })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="OPEN">OPEN</SelectItem>
+                        <SelectItem value="REVIEWING">REVIEWING</SelectItem>
+                        <SelectItem value="CLOSED">CLOSED</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>제목</Label>
+                  <Input value={reconForm.title} onChange={(e) => setReconForm({ ...reconForm, title: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>대상</Label>
+                  <Input
+                    placeholder="domain, IP, URL, API path"
+                    value={reconForm.target}
+                    onChange={(e) => setReconForm({ ...reconForm, target: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>관찰 내용</Label>
+                  <Textarea
+                    className="min-h-36"
+                    value={reconForm.observation}
+                    onChange={(e) => setReconForm({ ...reconForm, observation: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>증거</Label>
+                  <Textarea
+                    className="min-h-24 font-mono text-xs"
+                    placeholder="HTTP headers, response snippet, screenshot path, command output summary"
+                    value={reconForm.evidence}
+                    onChange={(e) => setReconForm({ ...reconForm, evidence: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>태그</Label>
+                  <Input
+                    placeholder="headers, exposure, cloud"
+                    value={reconForm.tags}
+                    onChange={(e) => setReconForm({ ...reconForm, tags: e.target.value })}
+                  />
+                </div>
+                <Button className="w-full" onClick={createReconNote} disabled={loading}>
+                  Recon 노트 저장
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Recon Board</CardTitle>
+                <CardDescription>수동 조사 결과를 상태와 키워드로 좁혀 봅니다.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-[180px_1fr_auto]">
+                  <Select
+                    value={reconFilter}
+                    onValueChange={(value) => {
+                      setReconFilter(value);
+                      loadReconNotes(value, reconSearch).catch((error) => toast.error(error.message));
+                    }}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">ALL</SelectItem>
+                      <SelectItem value="OPEN">OPEN</SelectItem>
+                      <SelectItem value="REVIEWING">REVIEWING</SelectItem>
+                      <SelectItem value="CLOSED">CLOSED</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    placeholder="대상, 관찰, 증거 검색"
+                    value={reconSearch}
+                    onChange={(e) => setReconSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") loadReconNotes().catch((error) => toast.error(error.message));
+                    }}
+                  />
+                  <Button variant="outline" onClick={() => loadReconNotes().catch((error) => toast.error(error.message))}>
+                    검색
+                  </Button>
+                </div>
+                <ScrollArea className="h-[700px]">
+                  <div className="space-y-3 pr-3">
+                    {reconNotes.map((note) => (
+                      <div key={note.id} className="rounded-md border p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="font-medium">{note.data.title}</div>
+                            <div className="mt-1 break-all font-mono text-xs text-muted-foreground">{note.data.target}</div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Badge variant="secondary">{note.data.assetType}</Badge>
+                            <Badge variant={note.data.risk === "HIGH" ? "destructive" : "outline"}>{note.data.risk}</Badge>
+                            <Badge variant="outline">{note.data.status}</Badge>
+                          </div>
+                        </div>
+                        <p className="mt-3 whitespace-pre-wrap text-sm">{note.data.observation}</p>
+                        {note.data.evidence && (
+                          <pre className="mt-3 max-h-36 overflow-auto rounded bg-muted p-3 text-xs">{note.data.evidence}</pre>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {note.data.tags.map((tag) => <Badge key={tag} variant="outline">{tag}</Badge>)}
+                        </div>
+                      </div>
+                    ))}
+                    {reconNotes.length === 0 && (
+                      <p className="py-16 text-center text-sm text-muted-foreground">Recon 노트가 없습니다.</p>
+                    )}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
