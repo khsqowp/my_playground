@@ -8,12 +8,40 @@ interface HistoryMessage {
   content: string;
 }
 
+interface RagContext {
+  id?: number;
+  source?: string | null;
+  page?: number | string | null;
+  locator?: string | null;
+  score?: number;
+}
+
 function ragServiceUrl() {
   return (process.env.RAG_SERVICE_URL || "").replace(/\/$/, "");
 }
 
 function ragGeminiApiKey() {
   return (process.env.AI_RAG_API_KEY_GEMINI || process.env.GEMINI_API_KEY || "").trim();
+}
+
+function formatRagReferences(contexts: RagContext[]) {
+  if (!Array.isArray(contexts) || contexts.length === 0) return "";
+
+  const seen = new Set<string>();
+  const lines = contexts
+    .filter((context) => context.source)
+    .map((context, index) => {
+      const id = context.id ?? index + 1;
+      const location = context.locator || (context.page ? `page ${context.page}` : "");
+      const key = `${context.source}|${location}`;
+      if (seen.has(key)) return null;
+      seen.add(key);
+      return `- [${id}] ${context.source}${location ? `, ${location}` : ""}`;
+    })
+    .filter(Boolean)
+    .slice(0, 8);
+
+  return lines.length > 0 ? `\n\n---\n\n**참조 자료**\n${lines.join("\n")}` : "";
 }
 
 async function askProjectRag(message: string, project: string, history?: HistoryMessage[]) {
@@ -47,7 +75,7 @@ async function askProjectRag(message: string, project: string, history?: History
       query,
       api_key: apiKey,
       limit: 8,
-      show_context: false,
+      show_context: true,
       web_search: false,
     }),
   });
@@ -62,7 +90,8 @@ async function askProjectRag(message: string, project: string, history?: History
     throw new Error(data.detail || data.error || "RAG 서비스 응답 오류");
   }
 
-  return data.answer || "답변을 생성하지 못했습니다.";
+  const answer = data.answer || "답변을 생성하지 못했습니다.";
+  return `${answer}${formatRagReferences(data.contexts || [])}`;
 }
 
 export async function POST(req: NextRequest) {

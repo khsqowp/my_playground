@@ -6,6 +6,7 @@ import { MessageCircle, X, Send, Bot, Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { MarkdownRenderer } from "@/components/shared/MarkdownRenderer";
 
 interface Message {
   role: "user" | "assistant";
@@ -181,13 +182,20 @@ export function FloatingChat() {
                     className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap ${
+                      className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
                         msg.role === "user"
                           ? "bg-primary text-primary-foreground"
                           : "bg-muted text-foreground"
-                      }`}
+                      } ${msg.role === "user" ? "whitespace-pre-wrap" : ""}`}
                     >
-                      {msg.content}
+                      {msg.role === "assistant" ? (
+                        <MarkdownRenderer
+                          content={msg.content}
+                          className="prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-headings:my-2 prose-pre:my-2"
+                        />
+                      ) : (
+                        msg.content
+                      )}
                     </div>
                   </div>
                 ))}
