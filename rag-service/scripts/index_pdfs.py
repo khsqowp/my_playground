@@ -2,7 +2,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -27,6 +26,7 @@ from qdrant_client.models import (
 )
 from tqdm import tqdm
 
+from project_utils import MEDIA_EXTENSIONS, SUPPORTED_EXTENSIONS, collection_for_project, safe_name
 from settings import get_data_root
 
 CACHE_ROOT = Path("/sandbox/cache").resolve()
@@ -40,13 +40,6 @@ def _emit(event: dict) -> None:
     """Write a single JSON-line progress event to stdout for the web layer to consume."""
     import sys
     print(json.dumps(event, ensure_ascii=False), flush=True, file=sys.stdout)
-DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".pptx", ".xlsx", ".md", ".txt", ".hwp", ".hwpx"}
-AUDIO_EXTENSIONS = {".mp3", ".m4a", ".wav", ".flac", ".aac", ".ogg", ".opus"}
-VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
-MEDIA_EXTENSIONS = AUDIO_EXTENSIONS | VIDEO_EXTENSIONS
-SUPPORTED_EXTENSIONS = DOCUMENT_EXTENSIONS | MEDIA_EXTENSIONS
-
-
 def clean_text(text: str) -> str:
     lines = [line.strip() for line in text.splitlines()]
     text = "\n".join(line for line in lines if line)
@@ -69,19 +62,6 @@ def iter_batches(items: list, batch_size: int) -> Iterable[list]:
         raise ValueError("batch_size must be greater than 0")
     for start in range(0, len(items), batch_size):
         yield items[start : start + batch_size]
-
-
-def safe_name(value: str) -> str:
-    cleaned = re.sub(r"[^0-9A-Za-z가-힣_-]+", "_", value).strip("_")
-    return cleaned or "default"
-
-
-def collection_for_project(project: str) -> str:
-    explicit = os.environ.get("COLLECTION_NAME", "").strip()
-    default_project = os.environ.get("PROJECT_NAME", "inbox")
-    if explicit and project == default_project:
-        return explicit
-    return f"{safe_name(project)}_docs"
 
 
 def safe_source_path(path: Path) -> str:

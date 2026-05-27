@@ -35,6 +35,7 @@ for mod in [
     "fastapi.responses",
     "pydantic",
     "qdrant_client",
+    "requests",
     "answer",
     "index_pdfs",
     "settings",
