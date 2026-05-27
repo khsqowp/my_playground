@@ -24,7 +24,11 @@ def project_names() -> list[str]:
     root = get_data_root()
     if not root.exists():
         return []
-    return sorted(path.name for path in root.iterdir() if path.is_dir())
+    try:
+        return sorted(path.name for path in root.iterdir() if path.is_dir())
+    except OSError as exc:
+        print(f"[watcher] failed to list data root {root}: {exc}", flush=True)
+        return []
 
 
 def run_index(project: str) -> None:
@@ -41,6 +45,23 @@ def run_index(project: str) -> None:
         )
     except Exception as exc:
         print(f"[watcher] indexing error for {project!r}: {exc}", flush=True)
+
+
+def can_watch(project_dir: Path) -> bool:
+    """PollingObserver snapshots recursively; skip projects with unreadable trees."""
+    def raise_walk_error(exc: OSError) -> None:
+        raise exc
+
+    try:
+        for root, dirs, _files in os.walk(project_dir, onerror=raise_walk_error):
+            # Force scandir errors to happen before watchdog gets the path.
+            dirs[:] = [name for name in dirs if not name.startswith(".")]
+            with os.scandir(root) as entries:
+                list(entries)
+        return True
+    except OSError as exc:
+        print(f"[watcher] skipping watch for {project_dir}: {exc}", flush=True)
+        return False
 
 
 class ProjectEventHandler(FileSystemEventHandler):
@@ -94,6 +115,9 @@ def _watch_project(observer: PollingObserver, project: str) -> None:
     project_dir = root / project
     if not project_dir.is_dir():
         return
+    if not can_watch(project_dir):
+        _index_queue.put(project)
+        return
     watch_key = (str(root), project)
     with _watched_lock:
         if watch_key in _watched_projects:
@@ -121,6 +145,15 @@ def _new_project_scanner(observer: PollingObserver) -> None:
                 _watch_project(observer, project)
 
 
+def _periodic_indexer() -> None:
+    interval = int(os.environ.get("WATCH_INTERVAL_SECONDS", "120"))
+    while True:
+        time.sleep(max(30, interval))
+        for project in project_names():
+            print(f"[watcher] periodic indexing enqueue {project!r}", flush=True)
+            _index_queue.put(project)
+
+
 def main() -> None:
     observer = PollingObserver(timeout=10)
     for project in project_names():
@@ -128,17 +161,25 @@ def main() -> None:
 
     threading.Thread(target=_debounce_worker, daemon=True).start()
     threading.Thread(target=_index_worker, daemon=True).start()
+    threading.Thread(target=_periodic_indexer, daemon=True).start()
 
-    observer.start()
-    threading.Thread(target=_new_project_scanner, args=(observer,), daemon=True).start()
+    observer_started = False
+    try:
+        observer.start()
+        observer_started = True
+        threading.Thread(target=_new_project_scanner, args=(observer,), daemon=True).start()
+    except OSError as exc:
+        print(f"[watcher] observer disabled: {exc}", flush=True)
 
     print("[watcher] started", flush=True)
     try:
         while True:
             time.sleep(60)
     except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
+        if observer_started:
+            observer.stop()
+    if observer_started:
+        observer.join()
 
 
 if __name__ == "__main__":
