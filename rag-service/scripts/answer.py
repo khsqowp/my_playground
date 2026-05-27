@@ -19,6 +19,43 @@ _dense_embedders: dict[str, TextEmbedding] = {}
 _reranker = None
 _embedder_lock = threading.Lock()
 
+KOREAN_SUFFIXES = (
+    "으로",
+    "에서",
+    "에게",
+    "이란",
+    "란",
+    "의",
+    "은",
+    "는",
+    "이",
+    "가",
+    "을",
+    "를",
+    "과",
+    "와",
+    "로",
+    "에",
+    "도",
+    "만",
+)
+PUBLIC_KEY_QUERY_MARKERS = ("공개키", "비대칭", "public", "asymmetric")
+PUBLIC_KEY_ALGORITHM_TERMS = (
+    "rsa",
+    "elgamal",
+    "엘가말",
+    "ecc",
+    "ecdsa",
+    "타원곡선",
+    "라빈",
+    "rabin",
+    "dsa",
+    "diffie",
+    "hellman",
+    "디피",
+    "헬만",
+)
+
 
 def _get_dense_embedder(model_name: str) -> TextEmbedding:
     with _embedder_lock:
@@ -45,16 +82,63 @@ def _get_reranker():
     return _reranker
 
 
+def _normalize_term(term: str) -> str:
+    normalized = term.strip().lower()
+    for suffix in KOREAN_SUFFIXES:
+        if normalized.endswith(suffix) and len(normalized) > len(suffix) + 1:
+            normalized = normalized[: -len(suffix)]
+            break
+    return normalized
+
+
 def query_terms(query: str) -> list[str]:
-    return [term for term in re.findall(r"[0-9A-Za-z가-힣]+", query) if len(term) >= 2]
+    terms: list[str] = []
+    for term in re.findall(r"[0-9A-Za-z가-힣]+", query):
+        if len(term) < 2:
+            continue
+        terms.append(term.lower())
+        normalized = _normalize_term(term)
+        if len(normalized) >= 2:
+            terms.append(normalized)
+
+    compact_query = re.sub(r"\s+", "", query.lower())
+    if any(marker in compact_query for marker in PUBLIC_KEY_QUERY_MARKERS):
+        terms.extend(PUBLIC_KEY_ALGORITHM_TERMS)
+
+    unique_terms: list[str] = []
+    seen: set[str] = set()
+    for term in terms:
+        if term not in seen:
+            seen.add(term)
+            unique_terms.append(term)
+    return unique_terms
 
 
 def rerank_score(vector_score: float, text: str, terms: list[str]) -> float:
     score = vector_score
+    normalized_text = text.lower()
+    compact_text = re.sub(r"\s+", "", normalized_text)
+    matched_terms = 0
     for term in terms:
-        if term in text:
+        if term in normalized_text or term in compact_text:
+            matched_terms += 1
             score += 0.08
+    if matched_terms >= 2:
+        score += 0.12
+    algorithm_hits = sum(1 for term in PUBLIC_KEY_ALGORITHM_TERMS if term in normalized_text or term in compact_text)
+    if algorithm_hits >= 2:
+        score += 0.22
+    elif algorithm_hits == 1:
+        score += 0.1
     return score
+
+
+def _sort_by_lexical_score(results: list, terms: list[str], limit: int) -> list:
+    return sorted(
+        results,
+        key=lambda r: rerank_score(r.score, ((r.payload or {}).get("text") or ""), terms),
+        reverse=True,
+    )[:limit]
 
 
 def retrieve(query: str, limit: int, candidates: int, project: str | None = None) -> list[dict]:
@@ -89,19 +173,17 @@ def retrieve(query: str, limit: int, candidates: int, project: str | None = None
             with_payload=True,
         ).points
 
+    terms = query_terms(query)
+
     try:
         from flashrank import RerankRequest
         passages = [{"id": i, "text": (r.payload or {}).get("text", "")} for i, r in enumerate(results)]
         reranked = _get_reranker().rerank(RerankRequest(query=query, passages=passages))
         id_to_result = {i: r for i, r in enumerate(results)}
-        top_results = [id_to_result[r["id"]] for r in reranked[:limit]]
+        reranked_results = [id_to_result[r["id"]] for r in reranked if r["id"] in id_to_result]
+        top_results = _sort_by_lexical_score(reranked_results[: max(limit * 3, limit)], terms, limit)
     except Exception:
-        terms = query_terms(query)
-        top_results = sorted(
-            results,
-            key=lambda r: rerank_score(r.score, ((r.payload or {}).get("text") or ""), terms),
-            reverse=True,
-        )[:limit]
+        top_results = _sort_by_lexical_score(results, terms, limit)
 
     contexts = []
     for idx, result in enumerate(top_results, start=1):
@@ -136,7 +218,9 @@ def build_prompt(query: str, contexts: list[dict], web_search: bool = False) -> 
 - 로컬 문서를 인용할 때는 [출처번호]를 붙여라. 웹 출처는 Gemini가 자동 인용한다.
 - 답변은 한국어로 하라.
 - 핵심을 먼저 말하고, 필요하면 짧은 bullet로 정리하라.
-- 마지막에 "로컬 문서 출처" 섹션을 만들고 파일명과 페이지를 나열하라."""
+- 질문이 "종류", "분류", "나열"을 묻는 경우 문서가 실제로 열거한 하위 항목만 답하라.
+- 질문어의 동의어, 상위 개념, 관련 시스템을 종류처럼 답하지 말라.
+- 별도의 출처 섹션은 만들지 말고, 근거 문장 끝에 [출처번호]만 붙여라."""
     else:
         system = """너는 사용자의 로컬 PDF 자료만 근거로 답하는 RAG assistant다.
 
@@ -146,7 +230,9 @@ def build_prompt(query: str, contexts: list[dict], web_search: bool = False) -> 
 - 답변은 한국어로 하라.
 - 핵심을 먼저 말하고, 필요하면 짧은 bullet로 정리하라.
 - 문장마다 가능한 한 [출처번호]를 붙여라.
-- 마지막에 "출처" 섹션을 만들고 파일명과 페이지를 나열하라."""
+- 질문이 "종류", "분류", "나열"을 묻는 경우 문서가 실제로 열거한 하위 항목만 답하라.
+- 질문어의 동의어, 상위 개념, 관련 시스템을 종류처럼 답하지 말라.
+- 별도의 출처 섹션은 만들지 말고, 근거 문장 끝에 [출처번호]만 붙여라."""
     return f"""{system}
 
 QUESTION:

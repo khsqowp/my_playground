@@ -24,11 +24,28 @@ function ragGeminiApiKey() {
   return (process.env.AI_RAG_API_KEY_GEMINI || process.env.GEMINI_API_KEY || "").trim();
 }
 
-function formatRagReferences(contexts: RagContext[]) {
+function stripGeneratedSourceSection(answer: string) {
+  const marker = answer.search(/\n\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(출처|참조 자료|로컬 문서 출처|references?)\s*(?:\*\*)?\s*\n/i);
+  return marker >= 0 ? answer.slice(0, marker).trim() : answer.trim();
+}
+
+function citedContextIds(answer: string) {
+  return new Set(
+    Array.from(answer.matchAll(/\[(\d+)\]/g))
+      .map((match) => Number(match[1]))
+      .filter((id) => Number.isFinite(id) && id > 0)
+  );
+}
+
+function formatRagReferences(contexts: RagContext[], answer: string) {
   if (!Array.isArray(contexts) || contexts.length === 0) return "";
 
+  const citedIds = citedContextIds(answer);
+  const relevantContexts = citedIds.size > 0
+    ? contexts.filter((context, index) => citedIds.has(context.id ?? index + 1))
+    : contexts.slice(0, 3);
   const seen = new Set<string>();
-  const lines = contexts
+  const lines = relevantContexts
     .filter((context) => context.source)
     .map((context, index) => {
       const id = context.id ?? index + 1;
@@ -39,7 +56,7 @@ function formatRagReferences(contexts: RagContext[]) {
       return `- [${id}] ${context.source}${location ? `, ${location}` : ""}`;
     })
     .filter(Boolean)
-    .slice(0, 8);
+    .slice(0, 5);
 
   return lines.length > 0 ? `\n\n---\n\n**참조 자료**\n${lines.join("\n")}` : "";
 }
@@ -74,7 +91,7 @@ async function askProjectRag(message: string, project: string, history?: History
       project,
       query,
       api_key: apiKey,
-      limit: 8,
+      limit: 5,
       show_context: true,
       web_search: false,
     }),
@@ -90,8 +107,9 @@ async function askProjectRag(message: string, project: string, history?: History
     throw new Error(data.detail || data.error || "RAG 서비스 응답 오류");
   }
 
-  const answer = data.answer || "답변을 생성하지 못했습니다.";
-  return `${answer}${formatRagReferences(data.contexts || [])}`;
+  const rawAnswer = data.answer || "답변을 생성하지 못했습니다.";
+  const answer = stripGeneratedSourceSection(rawAnswer);
+  return `${answer}${formatRagReferences(data.contexts || [], rawAnswer)}`;
 }
 
 export async function POST(req: NextRequest) {
