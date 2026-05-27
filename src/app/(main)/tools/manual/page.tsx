@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, ClipboardCopy, Plus, Radar, ShieldCheck } from "lucide-react";
+import { Activity, ClipboardCopy, FlaskConical, Plus, Radar, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,13 +46,41 @@ type OobCallback = {
   createdAt: string;
 };
 
+type PayloadRecord = {
+  kind: "payload";
+  ownerId: string;
+  title: string;
+  category: string;
+  payload: string;
+  context: string;
+  expectedSignal: string;
+  tags: string[];
+  risk: "LOW" | "MEDIUM" | "HIGH";
+  createdAt: string;
+  updatedAt: string;
+};
+
+const payloadCategories = ["sqli", "xss", "ssrf", "ssti", "lfi", "xxe", "cmdi", "auth", "recon", "other"];
+
 export default function ManualSecurityPage() {
   const [sessions, setSessions] = useState<StoredRecord<ManualSession>[]>([]);
   const [callbacks, setCallbacks] = useState<StoredRecord<OobCallback>[]>([]);
+  const [payloads, setPayloads] = useState<StoredRecord<PayloadRecord>[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [origin, setOrigin] = useState("");
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ title: "", target: "", scope: "" });
+  const [payloadFilter, setPayloadFilter] = useState("all");
+  const [payloadSearch, setPayloadSearch] = useState("");
+  const [payloadForm, setPayloadForm] = useState({
+    title: "",
+    category: "sqli",
+    risk: "MEDIUM",
+    payload: "",
+    context: "",
+    expectedSignal: "",
+    tags: "",
+  });
 
   const selectedSession = useMemo(
     () => sessions.find((item) => item.id === selectedSessionId) || sessions[0],
@@ -78,9 +107,20 @@ export default function ManualSecurityPage() {
     setCallbacks(data.callbacks || []);
   }
 
+  async function loadPayloads(category = payloadFilter, query = payloadSearch) {
+    const params = new URLSearchParams();
+    if (category) params.set("category", category);
+    if (query.trim()) params.set("q", query.trim());
+    const res = await fetch(`/api/tools/manual/payloads?${params.toString()}`);
+    if (!res.ok) throw new Error("페이로드 목록을 불러오지 못했습니다.");
+    const data = await res.json();
+    setPayloads(data.payloads || []);
+  }
+
   useEffect(() => {
     setOrigin(window.location.origin);
     loadSessions().catch((error) => toast.error(error.message));
+    loadPayloads().catch((error) => toast.error(error.message));
   }, []);
 
   useEffect(() => {
@@ -121,6 +161,39 @@ export default function ManualSecurityPage() {
   async function copy(text: string) {
     await navigator.clipboard.writeText(text);
     toast.success("복사되었습니다.");
+  }
+
+  async function createPayload() {
+    if (!payloadForm.title.trim() || !payloadForm.payload.trim()) {
+      toast.error("제목과 페이로드를 입력해주세요.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/tools/manual/payloads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payloadForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "페이로드 저장 실패");
+      setPayloadForm({
+        title: "",
+        category: payloadForm.category,
+        risk: "MEDIUM",
+        payload: "",
+        context: "",
+        expectedSignal: "",
+        tags: "",
+      });
+      await loadPayloads();
+      toast.success("페이로드를 저장했습니다.");
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -270,12 +343,166 @@ export default function ManualSecurityPage() {
         </TabsContent>
 
         <TabsContent value="payloads">
-          <Card>
-            <CardHeader>
-              <CardTitle>Payload Lab</CardTitle>
-              <CardDescription>다음 단계에서 구현됩니다.</CardDescription>
-            </CardHeader>
-          </Card>
+          <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FlaskConical className="h-5 w-5" />
+                  Payload Lab
+                </CardTitle>
+                <CardDescription>수동 진단에 사용할 페이로드와 기대 신호를 기록합니다.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>분류</Label>
+                    <Select
+                      value={payloadForm.category}
+                      onValueChange={(value) => setPayloadForm({ ...payloadForm, category: value })}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {payloadCategories.map((category) => (
+                          <SelectItem key={category} value={category}>{category.toUpperCase()}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>위험도</Label>
+                    <Select
+                      value={payloadForm.risk}
+                      onValueChange={(value) => setPayloadForm({ ...payloadForm, risk: value })}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="LOW">LOW</SelectItem>
+                        <SelectItem value="MEDIUM">MEDIUM</SelectItem>
+                        <SelectItem value="HIGH">HIGH</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>제목</Label>
+                  <Input value={payloadForm.title} onChange={(e) => setPayloadForm({ ...payloadForm, title: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Payload</Label>
+                  <Textarea
+                    className="min-h-32 font-mono text-xs"
+                    value={payloadForm.payload}
+                    onChange={(e) => setPayloadForm({ ...payloadForm, payload: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>사용 맥락</Label>
+                  <Textarea
+                    className="min-h-24"
+                    placeholder="예: 검색 파라미터, JSON body, XML entity, template expression"
+                    value={payloadForm.context}
+                    onChange={(e) => setPayloadForm({ ...payloadForm, context: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>기대 신호</Label>
+                  <Input
+                    placeholder="응답 지연, DNS callback, 에러 문자열, DOM 반영 등"
+                    value={payloadForm.expectedSignal}
+                    onChange={(e) => setPayloadForm({ ...payloadForm, expectedSignal: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>태그</Label>
+                  <Input
+                    placeholder="blind,time-based,json"
+                    value={payloadForm.tags}
+                    onChange={(e) => setPayloadForm({ ...payloadForm, tags: e.target.value })}
+                  />
+                </div>
+                <Button className="w-full" onClick={createPayload} disabled={loading}>
+                  페이로드 저장
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Saved Payloads</CardTitle>
+                <CardDescription>복사해서 수동 요청 도구나 프록시에 붙여 넣어 사용합니다.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-[180px_1fr_auto]">
+                  <Select
+                    value={payloadFilter}
+                    onValueChange={(value) => {
+                      setPayloadFilter(value);
+                      loadPayloads(value, payloadSearch).catch((error) => toast.error(error.message));
+                    }}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">ALL</SelectItem>
+                      {payloadCategories.map((category) => (
+                        <SelectItem key={category} value={category}>{category.toUpperCase()}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    placeholder="검색"
+                    value={payloadSearch}
+                    onChange={(e) => setPayloadSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") loadPayloads().catch((error) => toast.error(error.message));
+                    }}
+                  />
+                  <Button variant="outline" onClick={() => loadPayloads().catch((error) => toast.error(error.message))}>
+                    검색
+                  </Button>
+                </div>
+                <ScrollArea className="h-[620px]">
+                  <div className="space-y-3 pr-3">
+                    {payloads.map((item) => (
+                      <div key={item.id} className="rounded-md border p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <div className="font-medium">{item.data.title}</div>
+                            <div className="mt-1 flex flex-wrap gap-2">
+                              <Badge variant="secondary">{item.data.category.toUpperCase()}</Badge>
+                              <Badge variant={item.data.risk === "HIGH" ? "destructive" : "outline"}>{item.data.risk}</Badge>
+                              {item.data.tags.map((tag) => (
+                                <Badge key={tag} variant="outline">{tag}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                          <Button variant="outline" size="sm" onClick={() => copy(item.data.payload)}>
+                            <ClipboardCopy className="mr-2 h-4 w-4" />
+                            복사
+                          </Button>
+                        </div>
+                        <pre className="mt-3 max-h-36 overflow-auto rounded bg-muted p-3 text-xs">{item.data.payload}</pre>
+                        {(item.data.context || item.data.expectedSignal) && (
+                          <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
+                            <div>
+                              <div className="text-xs font-medium text-muted-foreground">Context</div>
+                              <p className="whitespace-pre-wrap">{item.data.context || "-"}</p>
+                            </div>
+                            <div>
+                              <div className="text-xs font-medium text-muted-foreground">Expected Signal</div>
+                              <p className="whitespace-pre-wrap">{item.data.expectedSignal || "-"}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {payloads.length === 0 && (
+                      <p className="py-16 text-center text-sm text-muted-foreground">저장된 페이로드가 없습니다.</p>
+                    )}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="archive">
